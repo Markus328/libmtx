@@ -509,65 +509,74 @@ int matrix_LU_decomposition(matrix_perm_t *__M_PERM, matrix_t *_M_LU,
     }
   }
 
-  for (int i = 0; i <= last_w_row; ++i) {
-    while (!ROW_ECHELON(i)) {
-      pivot = PIVOT(i);
+  for (int p = 0; p <= last_w_row; ++p) {
+    int pivot;
+    while ((pivot = PIVOT(p)) > p) {
 
-      // Apenas se tiver mais zeros passando a diagonal.
-      if (pivot > i) {
-        // Swapa os números da linha atual com a linha que eles deveriam estar
-        // (ideal), caso ela ja não esteja resolvida.
-        if (!ROW_ECHELON(pivot)) {
-          SWAP(i, pivot);
+      // Swapa os números da linha atual com a linha que eles deveriam estar
+      // (ideal), caso ela ja não esteja resolvida.
+      if (!ROW_ECHELON(pivot)) {
+        SWAP(p, pivot);
+      }
+
+      // Swapa com qualquer outra linha que faça sentido (que vá resolver ou
+      // mover o pivot para antes da diagonal)
+      int pn;
+      for (pn = p + 1; pn <= last_w_row; ++pn) {
+        if (ROW_ECHELON(pn)) {
           continue;
         }
 
-        // Swapa com qualquer outra linha que faça sentido (que vá resolver ou
-        // mover o pivot para antes da diagonal)
-        int p;
-        for (p = i + 1; p <= last_w_row; ++p) {
-          if (ROW_ECHELON(p)) {
-            continue;
-          }
-
-          if (PIVOT(p) <= i) {
-            SWAP(i, p);
-            break;
-          }
+        if (PIVOT(pn) == p) {
+          SWAP(p, pn);
+          break;
         }
+      }
 
-        // Caso não seja possível fazer swap com nenhuma linha (significa sem
-        // solução)
-        if (p > last_w_row) {
-          return -1;
-        }
+      // Caso não seja possível fazer swap com nenhuma linha (significa sem
+      // solução)
+      if (pn > last_w_row) {
+        return -1;
+      }
+    }
 
-        // Caso o pivot esteja antes da diagonal, realizar as somas com outra
-        // linha já resolvida para reduzir.
+    // Garantir que o pivot seja o maior número em módulo da coluna para
+    // aumentar a precisão dos cálculos.
+    double pp = matrix_at(_M_LU, p, p);
+    double max = _mod(pp);
+    int i_max = p;
+
+    for (int ic = p + 1; ic <= last_w_row; ++ic) {
+      double mod_pivc = _mod(matrix_at(_M_LU, ic, p));
+      if (mod_pivc > max) {
+        i_max = ic;
+        max = mod_pivc;
+      }
+    }
+    if (i_max != p) {
+      SWAP(p, i_max);
+      pp = matrix_at(_M_LU, p, p);
+    }
+
+    // Reduz todas as linhas abaixo, substituindo todos os valores na mesma
+    // coluna do pivot.
+    for (int ic = p + 1; ic <= last_w_row; ++ic) {
+      double ip = matrix_at(_M_LU, ic, p);
+
+      if (ip == 0) {
+        continue;
+      }
+
+      double mul = ip / pp; // abs(pp) >= abs(ip)
+      matrix_at(_M_LU, ic, p) = mul;
+
+      _mtx_sum_multiple(matrix_row(_M_LU, ic), matrix_row(_M_LU, p), -mul,
+                        p + 1, _M_LU->dx);
+
+      if (!perfect) {
+        SET_PIVOT(ic, p + 1);
       } else {
-        // Pega a linha que tem o pivot na mesma coluna do pivot da linha
-        // atual.
-        int prev_i = pivot;
-
-        // Caso a eliminação precise dividir um número maior que o menor, troca
-        // as linhas para evitar erros de precisão.
-        // if (_mod(matrix_at(_M_LU, prev_i, prev_i)) <
-        //     _mod(matrix_at(_M_LU, i, pivot))) {
-        //   SWAP(i, prev_i);
-        // }
-
-        double mul =
-            matrix_at(_M_LU, i, pivot) / matrix_at(_M_LU, prev_i, prev_i);
-
-        matrix_at(_M_LU, i, pivot) = mul;
-        _mtx_sum_multiple(_M_LU->data->m[i], _M_LU->data->m[prev_i], -mul,
-                          pivot + 1, _M_LU->dx);
-
-        if (!perfect) {
-          SET_PIVOT(i, pivot + 1);
-        } else {
-          SET_PIVOT_perf(i, pivot + 1);
-        }
+        SET_PIVOT_perf(ic, p + 1);
       }
     }
   }
@@ -650,8 +659,8 @@ double matrix_det(const matrix_t *M) {
     }                                                                          \
   } while (0)
 
-// Realiza a back substituition (debaixo pra cima) do sistema Ux = B. A matriz U
-// é uma upper triangular.
+// Realiza a back substituition (debaixo pra cima) do sistema Ux = B. A matriz
+// U é uma upper triangular.
 //
 // Caso a matriz tenha a diagnonal principal como sendo de apenas 1's, passe
 // jordan = 1 para ignorar a diagnonal, obtendo o mesmo resultado.
@@ -671,8 +680,8 @@ int matrix_back_subs(matrix_t *X, const matrix_t *U, const matrix_t *B,
     return 1; // TODO: Impl operação atômica.
   }
 
-  // Caso escrever em X vai alterar alguma linha não processada (linha acima) de
-  // B.
+  // Caso escrever em X vai alterar alguma linha não processada (linha acima)
+  // de B.
   if (MTX_OVERLAP(X, B) && (X->offY < B->offY)) {
     return 1; // TODO: Impl operação atômica
   }
@@ -764,11 +773,12 @@ int matrix_forward_subs(matrix_t *X, const matrix_t *L, const matrix_t *B,
 
 // Resolve o sistema linear Ax = B, representado pela matriz aumentada M_LU. A
 // matriz M_LU tem que estar previamente decomposta. Como as icógnitas podem
-// representar vetores (nesse caso, o resultado X é uma matriz e não um vetor),
-// B será separado de A nas ultimas colunas de M_LU de acordo com X->dx.
+// representar vetores (nesse caso, o resultado X é uma matriz e não um
+// vetor), B será separado de A nas ultimas colunas de M_LU de acordo com
+// X->dx.
 //
-// Retorna 1 caso o sistema seja indeterminado ou caso não seja possível separar
-// A de B (X-dx > M_LU->dx - 1).
+// Retorna 1 caso o sistema seja indeterminado ou caso não seja possível
+// separar A de B (X-dx > M_LU->dx - 1).
 int matrix_LU_AB_solve(matrix_t *X, const matrix_t *M_LU) {
   assert(M_LU->data != NULL);
   assert(X->data != NULL);
