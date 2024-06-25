@@ -60,12 +60,13 @@ void t_random_matrix(matrix_t *_M, int dy, int dx, struct rnd_buffer *rnd) {
 #undef DEF_RND_MTX
 
 // Máximo the threads a usar.
-#define WORKERS 1
+#define WORKERS 8
 
 worker_data worker_solve_augmented(worker_data *args) {
 
   matrix_t m = {0};
-  matrix_t ech = {0};
+  gsl_matrix *gsl_m;
+  matrix_t lu = {0};
 
   unsigned long total = WORKER_NEXT_ARG(ul);
   int d = WORKER_NEXT_ARG(i);
@@ -78,31 +79,64 @@ worker_data worker_solve_augmented(worker_data *args) {
 
   unsigned long zeros = 0;
 
-  vector_t x = {0};
+  matrix_t x = {0};
+  matrix_init(&x, dy, 1);
+  gsl_m = gsl_matrix_alloc(dy, dx);
 
-  matrix_t x_m = {0};
-  matrix_t b_m = {0};
-  matrix_t a_m = {0};
-  matrix_init(&x_m, dy, 1);
-  matrix_init(&b_m, dy, 1);
-  matrix_init(&a_m, dy, dx - 1);
+  matrix_init(&m, dy, dx);
+  matrix_init(&lu, dy, dx);
+
+  matrix_view_t A = matrix_view_of(&m, 0, 0, dy, dx - 1);
+  matrix_view_t B = matrix_view_of(&m, 0, dx - 1, dy, 1);
+  matrix_view_t B_LU = matrix_view_of(&lu, 0, dx - 1, dy, 1);
 
   for (unsigned long i = 0; i < total; ++i) {
+    t_random_matrix(&m, dy, dx, rnd_buf);
+
+    if (matrix_LU_decomp_perf(NULL, &lu, &m) < 0 ||
+        matrix_LU_AB_solve(&x, &lu) != 0) {
+      zeros++;
+      WORKER_START_PRINT;
+      printf("no solution for matrix(%d, %d):\n", dy, dx);
+      print_matrix(&m);
+      WORKER_END_PRINT;
+
+      continue;
+    }
+
+    matrix_mul(&B_LU.matrix, &A.matrix, &x);
+    if (matrix_distance(&B_LU.matrix, &B.matrix) > 1) {
+      WORKER_START_PRINT;
+      printf("Solution error: ");
+      print_matrix(&A.matrix);
+      printf("X\n");
+      print_matrix(&x);
+      printf("=\n");
+      print_matrix(&B_LU.matrix);
+      printf("Which is different of \n");
+      print_matrix(&B.matrix);
+      WORKER_END_PRINT;
+    }
+
+    // WORKER_START_PRINT;
+    // print_matrix(&m);
+    // printf("solution:\n");
+    // print_matrix(&x);
+    // WORKER_END_PRINT;
   }
 
   matrix_free(&m);
-  matrix_free(&ech);
-  vector_free(&x);
+  matrix_free(&lu);
   rnd_free(rnd_buf);
 
   return (worker_data){.ul = zeros};
 }
 
 void matrix_random_compose() {
-  int checks = 8000000;
+  int checks = 80000000;
 
   int each = checks / WORKERS;
-  int d = 5;
+  int d = 6;
 
   worker_t ws[WORKERS];
 
@@ -135,46 +169,16 @@ void matrix_random_compose() {
 
 int main(void) {
 
-  srand(time(NULL));
-  matrix_t m = {0};
-  matrix_t lu = {0};
-  int dx = 5, dy = dx - 1;
+  matrix_random_compose();
+  matrix_t m;
+  matrix_init(&m, 5, 6);
+  double arr[] = {
+      5, -1, -1, -6, 5, 8,  0,  -2, 0, 4,  -7, 9, 0, -4, 2,
+      8, -1, 3,  0,  2, -2, -3, -6, 0, -2, -9, 7, 1, 8,  -3,
 
-  random_matrix(&m, dy, dx);
+  };
+
+  matrix_fill_a(&m, arr);
+  matrix_LU_decomp(NULL, &m, &m);
   print_matrix(&m);
-
-  matrix_view_t B = matrix_view_of(&m, 0, dx - 1, dy, 1);
-
-  matrix_perm_t perm = {0};
-  int sig;
-  if ((sig = matrix_LU_decomp(&perm, &lu, &m) < 0)){
-    return 1;
-  }
-
-  print_matrix(&lu);
-
-  printf("permutation: ");
-  print_matrix(&perm);
-  matrix_mul(&m, &perm, &m);
-  print_matrix(&m);
-
-
-  matrix_view_t Alu = matrix_view_of(&lu, 0, 0, dy, dx - 1);
-  if(matrix_forward_subs(&m, &Alu.matrix, &m, 1) != 0){
-    printf("Error!\n");
-    return 1;
-  }
-
-
-
-  matrix_view_t Blu = matrix_view_of(&lu, 0, dx - 1, dy, 1);
-  if(matrix_distance(&Blu.matrix, &B.matrix) > 1){
-    printf("Method fail!\n");
-  }
-
-  printf("det lu = %g\n", matrix_det_LU(&lu, sig)) ;
-  printf("det m = %g\n", matrix_det_LU(&m, sig)) ;
-
-  print_matrix(&m);
-
 }

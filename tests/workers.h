@@ -101,7 +101,7 @@ worker_data worker_join(worker_t *wt) {
   free(wt->data);
   wt->data = NULL;
   wt->args = NULL;
-  return *(worker_data *)ret;
+  return (worker_data){.p = ret};
 }
 
 #endif

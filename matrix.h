@@ -33,7 +33,14 @@ typedef struct vector {
 
 #define MTX_MAX_ROWS 1024
 #define MTX_MAX_COLUMNS 1024
+#define MTX_MIN_DBL_VALUE 1e-300
+
 #define _mod(x) ((x) < 0 ? -(x) : (x))
+
+#define MTX_SET_DBL(dbl, value)                                                \
+  dbl = _mod(value) < MTX_MIN_DBL_VALUE ? 0 : (value)
+
+#define MTX_COMPARE_DBL(dbl1, dbl2) (_mod(dbl1 - dbl2) < MTX_MIN_DBL_VALUE)
 
 #define MTX_IS_SQUARE(M) ((M)->dx == (M)->dy)
 
@@ -138,7 +145,7 @@ void vector_free(vector_t *V) {
 }
 
 void matrix_fill_a(matrix_t *_M, double *array) {
-  assert(_M->data->m != NULL);
+  assert(_M->data != NULL);
   for (int i = 0; i < _M->dy; ++i) {
     memcpy(matrix_row(_M, i), array, sizeof(double) * _M->dx);
     array = &array[_M->dx];
@@ -148,7 +155,7 @@ void matrix_fill_a(matrix_t *_M, double *array) {
 void vector_fill_a(vector_t *_V, double *array) { memcpy(_V->m, array, _V->d); }
 
 void matrix_fill_m(matrix_t *_M, double **matrix) {
-  assert(_M->data->m != NULL && matrix != NULL);
+  assert(_M->data != NULL && matrix != NULL);
   assert(_M->offX == 0);
   for (int j = 0; j < _M->dy; ++j) {
     memcpy(_M->data->m[j], matrix[j], sizeof(double) * _M->dx);
@@ -164,14 +171,14 @@ void vector_fill_m(vector_t *_V, double **matrix, int dy) {
 }
 
 void matrix_clone(matrix_t *_M, const matrix_t *M) {
-  assert(_M != M && M->data->m != NULL);
+  assert(_M != M && M->data != NULL);
 
   matrix_init(_M, M->dy, M->dx);
   matrix_fill_m(_M, M->data->m);
 }
 
 int matrix_copy(matrix_t *M_TO, const matrix_t *M_FROM) {
-  assert(M_FROM->data->m != NULL && M_TO->data->m != NULL);
+  assert(M_FROM->data != NULL && M_TO->data != NULL);
 
   if (MTX_OVERLAP(M_TO, M_FROM)) {
     return 1;
@@ -187,7 +194,7 @@ int matrix_copy(matrix_t *M_TO, const matrix_t *M_FROM) {
 }
 matrix_view_t matrix_view_of(const matrix_t *M_OF, int init_i, int init_j,
                              int dy, int dx) {
-  assert(M_OF->data->m != NULL);
+  assert(M_OF->data != NULL);
   assert(init_i >= 0 && init_j >= 0);
   assert(dy >= 0 && dy >= 0);
 
@@ -207,7 +214,7 @@ matrix_view_t matrix_view_of(const matrix_t *M_OF, int init_i, int init_j,
 
 int matrix_copy_from(matrix_t *M_TO, const matrix_t *M_FROM, int init_i,
                      int init_j) {
-  assert(M_FROM->data->m != NULL && M_TO->data->m != NULL);
+  assert(M_FROM->data != NULL && M_TO->data != NULL);
   assert(init_i >= 0 && init_j >= 0);
 
   // if (init_i + M_TO->dy > M_FROM->dy || init_j + M_TO->dx > M_FROM->dx) {
@@ -235,7 +242,7 @@ void print_matrix(const matrix_t *M) {
 
 int matrix_mul(matrix_t *_C, const matrix_t *A, const matrix_t *B) {
 
-  assert(A->data->m != NULL && B->data->m != NULL);
+  assert(A->data != NULL && B->data != NULL);
   if (A->dx != B->dy) {
     return 1;
   }
@@ -287,7 +294,7 @@ int matrix_mul(matrix_t *_C, const matrix_t *A, const matrix_t *B) {
 }
 
 int matrix_s_mul(matrix_t *_M, const matrix_t *M, double scalar) {
-  assert(M != NULL && M->data->m != NULL);
+  assert(M != NULL && M->data != NULL);
 
   if (_M->data->m == NULL) {
     matrix_init(_M, M->dy, M->dx);
@@ -304,7 +311,7 @@ int matrix_s_mul(matrix_t *_M, const matrix_t *M, double scalar) {
 }
 
 int matrix_transpose(matrix_t *_M, const matrix_t *M) {
-  assert(M != NULL && M->data->m != NULL);
+  assert(M != NULL && M->data != NULL);
 
   if (_M->data == NULL) {
     matrix_init(_M, M->dx, M->dy);
@@ -378,12 +385,12 @@ static inline void _mtx_sum_multiple(double *r, double *mul_r, double mul,
                                      int start, int end) {
   // r[init_pos] = 0;
   for (int i = start; i < end; ++i) {
-    r[i] += mul_r[i] * mul;
+    MTX_SET_DBL(r[i], r[i] + mul_r[i] * mul);
   }
 }
 
 int matrix_equals(const matrix_t *A, const matrix_t *B) {
-  assert(A->data->m != NULL && B->data->m != NULL);
+  assert(A->data != NULL && B->data != NULL);
   if (MTX_ARE_SAME(A, B)) {
     return 1;
   }
@@ -393,7 +400,7 @@ int matrix_equals(const matrix_t *A, const matrix_t *B) {
 
   for (int i = 0; i < A->dy; ++i) {
     for (int j = 0; j < A->dx; ++j) {
-      if (matrix_at(A, i, j) != matrix_at(B, i, j)) {
+      if (!MTX_COMPARE_DBL(matrix_at(A, i, j), matrix_at(B, i, j))) {
         return 0;
       }
     }
@@ -459,7 +466,7 @@ int matrix_equals(const matrix_t *A, const matrix_t *B) {
 
 int matrix_LU_decomposition(matrix_perm_t *__M_PERM, matrix_t *_M_LU,
                             const matrix_t *M, int perfect) {
-  assert(M->data->m != NULL);
+  assert(M->data != NULL);
 
   // caso perfect == true, linhas zeradas serão consideradas erro. Com dx < dy,
   // isso inevitavelmente ocorrerá.
@@ -517,6 +524,7 @@ int matrix_LU_decomposition(matrix_perm_t *__M_PERM, matrix_t *_M_LU,
       // (ideal), caso ela ja não esteja resolvida.
       if (!ROW_ECHELON(pivot)) {
         SWAP(p, pivot);
+        continue;
       }
 
       // Swapa com qualquer outra linha que faça sentido (que vá resolver ou
@@ -610,7 +618,7 @@ int matrix_LU_decomposition(matrix_perm_t *__M_PERM, matrix_t *_M_LU,
 // decomposta: undefined behavior. Recomendado usar somente combinado com
 // matrix_LU_decomp_perf().
 double matrix_det_LU(const matrix_t *M_LU, int signum) {
-  assert(M_LU->data->m != NULL);
+  assert(M_LU->data != NULL);
 
   double det = 1;
   if (signum >= 0) {
@@ -632,7 +640,7 @@ double matrix_det_LU(const matrix_t *M_LU, int signum) {
 // Calcula o determinante de uma dada matriz quadrada M. Retorna zero se a
 // matriz não for quadrada (para mxn e n > m, use matrix_det_LU()).
 double matrix_det(const matrix_t *M) {
-  assert(M->data->m != NULL);
+  assert(M->data != NULL);
 
   if (!MTX_IS_SQUARE(M)) {
     return 0;
@@ -816,7 +824,7 @@ double matrix_distance(const matrix_t *A, const matrix_t *B) {
 
 #define DEF_MTX_SIMPLE_OP(name, operation)                                     \
   int matrix_##name(matrix_t *_C, matrix_t *A, matrix_t *B) {                  \
-    assert(A->data->m != NULL && B->data->m != NULL);                          \
+    assert(A->data != NULL && B->data != NULL);                                \
                                                                                \
     if (!MTX_SAME_DIMENSIONS(A, B)) {                                          \
       return 1;                                                                \
