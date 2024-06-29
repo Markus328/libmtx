@@ -37,8 +37,7 @@ typedef struct vector {
 
 #define _mod(x) ((x) < 0 ? -(x) : (x))
 
-#define MTX_SET_DBL(dbl, value)                                                \
-  dbl = _mod(value) < MTX_MIN_DBL_VALUE ? 0 : (value)
+#define MTX_SET_DBL(dbl, value) dbl = value;
 
 #define MTX_COMPARE_DBL(dbl1, dbl2) (_mod(dbl1 - dbl2) < MTX_MIN_DBL_VALUE)
 
@@ -66,6 +65,11 @@ typedef struct vector {
 #define MTX_OVERLAP(M1, M2)                                                    \
   (MTX_ARE_SHARED(M1, M2) && (MTX_OVERLAP_OF(M1, M2) && MTX_OVERLAP_OF(M2, M1)))
 
+#define MTX_OVERLAP_AFTER(M1, M2)                                              \
+  (MTX_OVERLAP(M1, M2) &&                                                      \
+   ((M2)->offY > (M1)->offY ||                                                 \
+    ((M2)->offX > (M1)->offX && (M2)->offY == (M1)->offY)))
+
 // void matrix_init0(matrix_t *M, unsigned int dy, unsigned int dx) {
 //   _m_init_dy(M, dy);
 //   M->dx = dx;
@@ -74,6 +78,42 @@ typedef struct vector {
 //     M->m[i] = (double *)calloc(dx, sizeof(double));
 //   }
 // }
+
+// Cria um alias de uma matriz, copiando as bordas e referenciando os dados.
+#define CREATE_OUTPUT_ALIAS(name, output) matrix_t name = *(output)
+
+// Caso rules == true, executa action() com argumentos na va_args. Recebe uma
+// matrix_t alias e uma matrix_t * output.
+#define GET_SAFE_OUTPUT_IN_DETAILS(alias, output, rules, action, ...)          \
+  do {                                                                         \
+    if (rules) {                                                               \
+      alias.data = NULL;                                                       \
+      action(&(alias), __VA_ARGS__);                                           \
+    }                                                                          \
+  } while (0)
+
+// Caso rules == true , aloca uma nova matriz de output para alias, que deixará
+// de ser um alias e terá dados alocados para si.
+#define GET_SAFE_OUTPUT_RULES(alias, output, rules)                            \
+  GET_SAFE_OUTPUT_IN_DETAILS(alias, output, rules, matrix_init, (output)->dy,  \
+                             (output)->dx)
+
+// Caso output convegir com input, aloca uma nova matriz com as mesmas dimensões
+// de input e guarda na matrix_t alias.
+#define GET_SAFE_OUTPUT(alias, output, input)                                  \
+  GET_SAFE_OUTPUT_RULES(alias, output, input, MTX_OVERLAP((input), (output)))
+
+// Caso matrix_t alias e matrix_t * output não sejam a mesma matriz, copia o que
+// tem em alias para output. Usar somente depois de CREATE_OUTPUT_ALIAS e
+// GET_SAFE_OUTPUT*.
+#define COMMIT_OUTPUT(alias, output)                                           \
+  do {                                                                         \
+    if (!MTX_ARE_SAME(&alias, output)) {                                       \
+      matrix_copy(output, &alias);                                             \
+      matrix_free(&alias);                                                     \
+    }                                                                          \
+  } while (0)
+
 void matrix_init(matrix_t *_M, int dy, int dx) {
   assert(dy <= MTX_MAX_ROWS && dx <= MTX_MAX_COLUMNS);
   assert(dy > 0 && dx > 0);
@@ -247,25 +287,18 @@ int matrix_mul(matrix_t *_C, const matrix_t *A, const matrix_t *B) {
     return 1;
   }
 
-  matrix_t mul_res;
-
   if (_C->data == NULL) {
     matrix_init(_C, A->dy, B->dx);
-    mul_res = *_C;
   } else {
 
     if (_C->dx != B->dx || _C->dy != A->dy) {
       return 1;
     }
-
-    // Se a matriz _C convegir com a matrix A ou B, realizar cálculos em uma
-    // nova matriz temporária e depois copiar o resultado para _C
-    if (MTX_OVERLAP(_C, A) || MTX_OVERLAP(_C, B)) {
-      matrix_init(&mul_res, _C->dy, _C->dx);
-    } else {
-      mul_res = *_C;
-    }
   }
+
+  CREATE_OUTPUT_ALIAS(mul_res, _C);
+
+  GET_SAFE_OUTPUT_RULES(mul_res, _C, MTX_OVERLAP(_C, A) || MTX_OVERLAP(_C, B));
 
   int bx = 0, ay = 0;
 
@@ -284,23 +317,22 @@ int matrix_mul(matrix_t *_C, const matrix_t *A, const matrix_t *B) {
     }
   }
 
-  if (!MTX_ARE_SAME(_C, &mul_res)) {
-    // Copiar o que está na matriz temporária para _C
-    matrix_copy(_C, &mul_res);
-    matrix_free(&mul_res);
-  }
-
+  COMMIT_OUTPUT(mul_res, _C);
   return 0;
 }
 
 int matrix_s_mul(matrix_t *_M, const matrix_t *M, double scalar) {
   assert(M != NULL && M->data != NULL);
 
-  if (_M->data->m == NULL) {
+  if (_M->data == NULL) {
     matrix_init(_M, M->dy, M->dx);
   } else if (!MTX_SAME_DIMENSIONS(_M, M)) {
     return 1;
   }
+
+  CREATE_OUTPUT_ALIAS(m_res, _M);
+
+  GET_SAFE_OUTPUT_RULES(m_res, _M, MTX_OVERLAP_AFTER(M, _M));
   for (int i = 0; i < _M->dy; ++i) {
     for (int j = 0; j < _M->dx; ++j) {
       matrix_at(_M, i, j) = matrix_at(M, i, j) * scalar;
@@ -468,8 +500,8 @@ int matrix_LU_decomposition(matrix_perm_t *__M_PERM, matrix_t *_M_LU,
                             const matrix_t *M, int perfect) {
   assert(M->data != NULL);
 
-  // caso perfect == true, linhas zeradas serão consideradas erro. Com dx < dy,
-  // isso inevitavelmente ocorrerá.
+  // caso perfect == true, linhas zeradas serão consideradas erro. Com dx <
+  // dy, isso inevitavelmente ocorrerá.
   if (perfect && M->dx < M->dy) {
     return -1;
   }
@@ -594,7 +626,7 @@ int matrix_LU_decomposition(matrix_perm_t *__M_PERM, matrix_t *_M_LU,
 
 // Transforma uma matriz mxn na forma reduzida. O algoritmo vai tentar reduzir a
 // matriz 100%, permitindo linhas zeradas e movendo-as para o fim da matriz.
-// Retorna o signum 0 ou 1 se sucesso e -1 caso haja falha.
+// Retorna o signum >= 0 se sucesso e negativo caso haja falha.
 #define matrix_LU_decomp(__M_PERM, _M, M)                                      \
   matrix_LU_decomposition((__M_PERM), (_M), (M), 0)
 
@@ -611,6 +643,49 @@ int matrix_LU_decomposition(matrix_perm_t *__M_PERM, matrix_t *_M_LU,
 #undef SWAP
 #undef SET_PIVOT
 #undef SET_PIVOT_perf
+
+// Permuta a matriz M de acordo com a matriz de permutação M_PERM. O resultado
+// final é o mesmo de M_PERM x M, porém é mais otimizado para tal.
+int matrix_permutate(matrix_t *_M, const matrix_t *M,
+                     const matrix_perm_t *M_PERM) {
+  assert(M->data != NULL && M_PERM->data != NULL);
+  assert(MTX_IS_SQUARE(M_PERM));
+
+  if (M_PERM->dy != M->dy) {
+    return 1;
+  }
+
+  if (_M->data == NULL) {
+    matrix_init(_M, M->dy, M->dx);
+  }
+  if (!MTX_SAME_DIMENSIONS(_M, M)) {
+    return 1;
+  }
+
+  CREATE_OUTPUT_ALIAS(permutated, _M);
+
+  GET_SAFE_OUTPUT_RULES(permutated, _M,
+                        MTX_OVERLAP(_M, M) || MTX_OVERLAP(_M, M_PERM));
+
+  int pivot;
+  int lower_pivot = 0;
+  int higher_pivot = M_PERM->dx - 1;
+  for (int i = 0; i < M_PERM->dy; ++i) {
+    pivot =
+        _mtx_row_pivot(matrix_row(M_PERM, i), lower_pivot, higher_pivot + 1);
+    if (pivot == lower_pivot) {
+      ++lower_pivot;
+    }
+    if (pivot == higher_pivot) {
+      --higher_pivot;
+    }
+    _mtx_row_copy(matrix_row(&permutated, i), matrix_row(M, pivot),
+                  permutated.dx);
+  }
+
+  COMMIT_OUTPUT(permutated, _M);
+  return 0;
+}
 
 // Calcula o determinante de uma dada matriz na forma decomposta. A
 // matriz não necessariamente precisa ser quadrada: se a matriz for mxn, a
@@ -667,31 +742,18 @@ double matrix_det(const matrix_t *M) {
     }                                                                          \
   } while (0)
 
-// Realiza a back substituition (debaixo pra cima) do sistema Ux = B. A matriz
-// U é uma upper triangular.
+// Realiza a back substitution (debaixo pra cima) do sistema Ux = B. A matriz
+// U é uma matriz quadrada upper triangular.
 //
 // Caso a matriz tenha a diagnonal principal como sendo de apenas 1's, passe
 // jordan = 1 para ignorar a diagnonal, obtendo o mesmo resultado.
 //
 // O resultado (x) é retornada na matriz X.
-int matrix_back_subs(matrix_t *X, const matrix_t *U, const matrix_t *B,
+int matrix_back_subs(matrix_t *_X, const matrix_t *U, const matrix_t *B,
                      int jordan) {
-  assert(U->data != NULL && B->data != NULL && X->data != NULL);
-
-  if (!MTX_SAME_DIMENSIONS(X, B)) {
+  assert(U->data != NULL && B->data != NULL);
+  if (!MTX_IS_SQUARE(U) || U->dy != B->dy) {
     return 1;
-  }
-
-  // Caso escrever em X vai alterar alterar alguma linha não processada (linha
-  // atual ou acima) de U.
-  if (MTX_OVERLAP(X, U) && (X->offY <= U->offY)) {
-    return 1; // TODO: Impl operação atômica.
-  }
-
-  // Caso escrever em X vai alterar alguma linha não processada (linha acima)
-  // de B.
-  if (MTX_OVERLAP(X, B) && (X->offY < B->offY)) {
-    return 1; // TODO: Impl operação atômica
   }
 
   int dx = U->dx;
@@ -699,55 +761,63 @@ int matrix_back_subs(matrix_t *X, const matrix_t *U, const matrix_t *B,
   int var_num = dx;
 
   // Sistema indeterminado
-  if (var_num > dy || matrix_at(U, var_num - 1, var_num - 1) == 0) {
+  if (matrix_at(U, dy - 1, dx - 1) == 0) {
     return 1;
   }
+
+  if (_X->data == NULL) {
+    matrix_init(_X, var_num, B->dx);
+  } else if (!MTX_SAME_DIMENSIONS(_X, B)) {
+    return 1;
+  }
+
+  CREATE_OUTPUT_ALIAS(x, _X);
+
+  GET_SAFE_OUTPUT_RULES(x, _X,
+                        (MTX_OVERLAP(_X, B) && (_X->offY < B->offY)) ||
+                            (MTX_OVERLAP(_X, U) && (_X->offY <= U->offY)));
 
   double *U_i;
   double *X_i;
   for (int i = var_num - 1; i >= 0; --i) {
     U_i = matrix_row(U, i);
-    X_i = matrix_row(X, i);
+    X_i = matrix_row(_X, i);
 
-    _mtx_row_copy(X_i, matrix_row(B, i), X->dx);
+    _mtx_row_copy(X_i, matrix_row(B, i), _X->dx);
     for (int j = i + 1; j < var_num; ++j) {
-      _mtx_sum_multiple(X_i, matrix_row(X, j), -U_i[j], 0, X->dx);
+      _mtx_sum_multiple(X_i, matrix_row(_X, j), -U_i[j], 0, _X->dx);
     }
 
     if (!jordan) {
       double pivot = U_i[i];
-      _mtx_row_mul(matrix_row(X, i), 1.0 / pivot, X->dx);
+      _mtx_row_mul(matrix_row(_X, i), 1.0 / pivot, _X->dx);
     }
   }
+
+  COMMIT_OUTPUT(x, _X);
 
   return 0;
 }
 
-// Realiza a forward substituition (de cima para baixo) do sistema Lx = B. A
+// Realiza a forward substitution (de cima para baixo) do sistema Lx = B. A
 // matriz L é uma lower triangular.
 //
 // Caso a matriz tenha a diagnonal principal como sendo de apenas 1's, passe
 // jordan = 1 para ignorar a diagnonal, obtendo o mesmo resultado.
 //
 // O resultado (x) é retornada na matriz X.
-int matrix_forward_subs(matrix_t *X, const matrix_t *L, const matrix_t *B,
+int matrix_forward_subs(matrix_t *_X, const matrix_t *L, const matrix_t *B,
                         int jordan) {
 
-  assert(L->data != NULL && B->data != NULL && X->data != NULL);
+  assert(L->data != NULL && B->data != NULL);
 
-  if (!MTX_SAME_DIMENSIONS(X, B)) {
+  if (B->dy != L->dy) {
     return 1;
   }
-  // Caso escrever em X vai alterar alterar alguma linha não processada (linha
-  // atual ou abaixo) de L.
-  if (MTX_OVERLAP(X, L) && (X->offY >= L->offY)) {
-    return 1; // TODO: Impl operação atômica.
-  }
-
-  // Caso escrever em X vai alterar alguma linha não processada (linha abaixo)
-  // de B.
-  if (MTX_OVERLAP(X, B) && (X->offY > B->offY)) {
-    return 1; // TODO: Impl operação atômica
+  if (_X->data == NULL) {
+    matrix_init(_X, B->dy, B->dx);
+  } else if (!MTX_SAME_DIMENSIONS(_X, B)) {
+    return 1;
   }
 
   int dx = L->dx;
@@ -759,56 +829,101 @@ int matrix_forward_subs(matrix_t *X, const matrix_t *L, const matrix_t *B,
     return 1;
   }
 
+  CREATE_OUTPUT_ALIAS(x, _X);
+
+  GET_SAFE_OUTPUT_RULES(x, _X,
+                        (MTX_OVERLAP(_X, B) && (_X->offY > B->offY)) ||
+                            (MTX_OVERLAP(_X, L) && (_X->offY >= L->offY)));
+
   double *L_i;
   double *X_i;
   for (int i = 0; i < var_num; ++i) {
     L_i = matrix_row(L, i);
-    X_i = matrix_row(X, i);
+    X_i = matrix_row(&x, i);
 
-    _mtx_row_copy(X_i, matrix_row(B, i), X->dx);
+    _mtx_row_copy(X_i, matrix_row(B, i), x.dx);
     for (int j = 0; j < i; ++j) {
-      _mtx_sum_multiple(X_i, matrix_row(X, j), -L_i[j], 0, X->dx);
+      _mtx_sum_multiple(X_i, matrix_row(&x, j), -L_i[j], 0, x.dx);
     }
 
     if (!jordan) {
       double diagn = L_i[i];
-      _mtx_row_mul(matrix_row(X, i), 1.0 / diagn, X->dx);
+      _mtx_row_mul(matrix_row(&x, i), 1.0 / diagn, x.dx);
     }
   }
+
+  // Caso dy > dx, continua a substituir os elementos abaixo.
+  for (int i = var_num; i < L->dy; ++i) {
+    L_i = matrix_row(L, i);
+    X_i = matrix_row(&x, i);
+
+    _mtx_row_copy(X_i, matrix_row(B, i), x.dx);
+    for (int j = 0; j < L->dx; ++j) {
+      _mtx_sum_multiple(X_i, matrix_row(&x, j), -L_i[j], 0, x.dx);
+    }
+  }
+
+  COMMIT_OUTPUT(x, _X);
 
   return 0;
 }
 
-// Resolve o sistema linear Ax = B, representado pela matriz aumentada M_LU. A
-// matriz M_LU tem que estar previamente decomposta. Como as icógnitas podem
+// Resolve o sistema linear Ax = B, representado pela matriz aumentada A_LU. A
+// matriz A_LU tem que estar previamente decomposta. Como as icógnitas podem
 // representar vetores (nesse caso, o resultado X é uma matriz e não um
-// vetor), B será separado de A nas ultimas colunas de M_LU de acordo com
+// vetor), B será separado de A nas ultimas colunas de A_LU de acordo com
 // X->dx.
 //
-// Retorna 1 caso o sistema seja indeterminado ou caso não seja possível
-// separar A de B (X-dx > M_LU->dx - 1).
-int matrix_LU_AB_solve(matrix_t *X, const matrix_t *M_LU) {
-  assert(M_LU->data != NULL);
+// Falha caso o sistema seja impossível, indeterminado ou caso não seja
+// possível separar A de B (X-dx > A_LU->dx - 1).
+int matrix_LU_AB_solve(matrix_t *X, const matrix_t *AB_LU) {
+  assert(AB_LU->data != NULL);
   assert(X->data != NULL);
 
-  if (X->dx > M_LU->dx - 1 || X->dy != M_LU->dy) {
+  int var_num = AB_LU->dx - X->dx;
+  if (var_num < 1 || X->dy < var_num) {
     return 1;
   }
-  int var_num = M_LU->dx - X->dx;
-  matrix_view_t A = matrix_view_of(M_LU, 0, 0, M_LU->dy, var_num);
-  matrix_view_t B = matrix_view_of(M_LU, 0, var_num, M_LU->dy, X->dx);
+
+  matrix_view_t B = matrix_view_of(AB_LU, 0, var_num, AB_LU->dy, X->dx);
+
+  // Sistema impossível
+  if (AB_LU->dy > var_num) {
+    for (int bi = var_num; bi < B.matrix.dy; ++bi) {
+      for (int bj = 0; bj < B.matrix.dx; ++bj) {
+        if (matrix_at(&B.matrix, bi, bj) != 0) {
+          return 1;
+        }
+      }
+    }
+  }
+
+  matrix_view_t A = matrix_view_of(AB_LU, 0, 0, var_num, var_num);
+
+  // B->dy = A->dx = A->dy
+  B.matrix.dy = A.matrix.dx;
 
   return matrix_back_subs(X, &A.matrix, &B.matrix, 0);
 }
 
+// Resolve o sistema linear Ax = B, representado pela matriz decomposta de A
+// em A_LU e pela matriz B. Tanto A_LU quanto B precisam ter o mesmo número de
+// linhas.
+//
+// Falha caso o sistema seja indeterminado.
+int matrix_LU_solve(matrix_t *_X, const matrix_t *A_LU, const matrix_t *B) {}
+
+// Calcula e retorna o grau de diferença entre as matrizes A e B. Retorna
+// sempre um número positivo, exceto na falha na qual o número retornado é
+// negativo.
 double matrix_distance(const matrix_t *A, const matrix_t *B) {
   assert(A->data != NULL && B->data != NULL);
 
-  if (MTX_ARE_SAME(A, B)) {
-    return 0;
-  }
   if (!MTX_SAME_DIMENSIONS(A, B)) {
     return -1;
+  }
+  if (MTX_ARE_SAME(A, B)) {
+    return 0;
   }
 
   double dt = 0;
@@ -816,6 +931,49 @@ double matrix_distance(const matrix_t *A, const matrix_t *B) {
   for (int i = 0; i < A->dy; ++i) {
     for (int j = 0; j < A->dx; ++j) {
       dt += _mod(matrix_at(A, i, j) - matrix_at(B, i, j));
+    }
+  }
+
+  return dt;
+}
+
+// Subtrai a matriz A da matriz B com o resultado em _M_D e retorna o
+// somátorio dos módulos de cada elemento de _M_D, que é sempre um número
+// positivo. O valor retornado é exatamente a distancia entre as duas
+// matrizes, sendo equivalente ao retornado por matrix_distance().
+//
+// Retorna zero se as matrizes forem idênticas e negativo caso ocorra erro. Em
+// ambos os casos, _M_DU pode não conter a subtração de A e B, portanto, deve
+// ser ignorado.
+double matrix_distance_each(matrix_t *_M_D, const matrix_t *A,
+                            const matrix_t *B) {
+  assert(A->data != NULL && B->data != NULL);
+
+  if (!MTX_SAME_DIMENSIONS(A, B)) {
+    return -1;
+  }
+  if (MTX_ARE_SAME(A, B)) {
+    return 0;
+  }
+
+  if (_M_D->data == NULL) {
+    matrix_init(_M_D, A->dy, A->dx);
+  } else if (!MTX_SAME_DIMENSIONS(_M_D, A)) {
+    return -1;
+  }
+
+  CREATE_OUTPUT_ALIAS(m_d, _M_D);
+  GET_SAFE_OUTPUT_RULES(
+      m_d, _M_D, MTX_OVERLAP_AFTER(A, _M_D) || MTX_OVERLAP_AFTER(B, _M_D));
+
+  double dt = 0;
+
+  double diff;
+  for (int i = 0; i < A->dy; ++i) {
+    for (int j = 0; j < A->dx; ++j) {
+      diff = matrix_at(A, i, j) - matrix_at(B, i, j);
+      matrix_at(&m_d, i, j) = diff;
+      dt += _mod(diff);
     }
   }
 

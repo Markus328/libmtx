@@ -105,7 +105,7 @@ worker_data worker_solve_augmented(worker_data *args) {
     }
 
     matrix_mul(&B_LU.matrix, &A.matrix, &x);
-    if (matrix_distance(&B_LU.matrix, &B.matrix) > 1) {
+    if (matrix_distance(&B_LU.matrix, &B.matrix) > 1e-6) {
       WORKER_START_PRINT;
       printf("Solution error: ");
       print_matrix(&A.matrix);
@@ -132,11 +132,68 @@ worker_data worker_solve_augmented(worker_data *args) {
   return (worker_data){.ul = zeros};
 }
 
+worker_data test_decomposition(worker_data *args) {
+  if (args == NULL) {
+    return (worker_data)NULL;
+  }
+
+  unsigned long count = WORKER_NEXT_ARG(ul);
+  unsigned long d = WORKER_NEXT_ARG(i);
+  int dx = d, dy = dx + 1;
+  unsigned long errors = 0;
+
+  struct rnd_buffer *buf = rnd_alloc_uchars(dx * dy * count);
+
+  matrix_t m = {0};
+  matrix_t lu = {0};
+  matrix_t perm = {0};
+  matrix_t re_decomp = {0};
+  for (unsigned long i = 0; i < count; ++i) {
+    t_random_matrix(&m, dy, dx, buf);
+
+    if (matrix_LU_decomp(&perm, &lu, &m) < 0) {
+      continue;
+    }
+
+    matrix_permutate(&re_decomp, &m, &perm);
+    matrix_forward_subs(&re_decomp, &lu, &re_decomp, 1);
+
+    double dt = 0;
+    for (int ui = 0; ui < lu.dy; ++ui) {
+      for (int uj = ui; uj < lu.dx; ++uj) {
+        dt += _mod(matrix_at(&re_decomp, ui, uj) - matrix_at(&lu, ui, uj));
+      }
+    }
+    if (dt > 0) {
+      WORKER_START_PRINT;
+
+      errors++;
+      printf("re-decomposition failed for ");
+      print_matrix(&m);
+
+      printf("Expected:\n");
+      print_matrix(&lu);
+      printf("Got:\n");
+      print_matrix(&re_decomp);
+
+      WORKER_END_PRINT;
+    }
+  }
+
+  matrix_free(&m);
+  matrix_free(&lu);
+  matrix_free(&perm);
+  matrix_free(&re_decomp);
+  rnd_free(buf);
+
+  return (worker_data){.ul = errors};
+}
+
 void matrix_random_compose() {
   int checks = 80000000;
 
   int each = checks / WORKERS;
-  int d = 6;
+  int d = 10;
 
   worker_t ws[WORKERS];
 
@@ -156,6 +213,7 @@ void matrix_random_compose() {
   //   all_zeros += zeros;
   // }
 
+  printf("[compose] Starting solve augmented tests...");
   for (int i = 0; i < WORKERS; ++i) {
     ws[i] = worker_start(worker_solve_augmented, 1, args, 2);
   }
@@ -165,20 +223,40 @@ void matrix_random_compose() {
 
   printf("[compose] ALL threads completed! Found %lu zeros in total.\n",
          all_zeros);
+
+  printf("[compose] Starting decomposition_tests...");
+
+  unsigned long all_errors = 0;
+  for (int i = 0; i < WORKERS; ++i) {
+    ws[i] = worker_start(test_decomposition, 1, args, 2);
+  }
+  for (int i = 0; i < WORKERS; ++i) {
+    all_errors += worker_join(&ws[i]).ul;
+  }
+
+  printf("[compose] ALL threads completed! Found %lu errors in total.\n",
+         all_errors);
 }
 
 int main(void) {
 
   matrix_random_compose();
   matrix_t m;
-  matrix_init(&m, 5, 6);
-  double arr[] = {
-      5, -1, -1, -6, 5, 8,  0,  -2, 0, 4,  -7, 9, 0, -4, 2,
-      8, -1, 3,  0,  2, -2, -3, -6, 0, -2, -9, 7, 1, 8,  -3,
-
-  };
+  matrix_init(&m, 3, 3);
+  double arr[] = {1, 0, 1, 0, 1, 0, 1, 1, 1};
 
   matrix_fill_a(&m, arr);
-  matrix_LU_decomp(NULL, &m, &m);
   print_matrix(&m);
+
+  matrix_t lu = {0};
+  matrix_perm_t perm = {0};
+
+  matrix_t x;
+  if (matrix_LU_decomp(&perm, &lu, &m) >= 0) {
+    print_matrix(&lu);
+    matrix_init(&x, 2, 1);
+    if(matrix_LU_AB_solve(&x, &lu) == 0){
+      print_matrix(&x);
+    }
+  }
 }
