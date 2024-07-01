@@ -62,6 +62,24 @@ void t_random_matrix(matrix_t *_M, int dy, int dx, struct rnd_buffer *rnd) {
 // Máximo the threads a usar.
 #define WORKERS 8
 
+int mtx_solution_check(matrix_t *_B, const matrix_t *A, const matrix_t *B,
+                       const matrix_t *X) {
+  matrix_mul(_B, A, X);
+  if (matrix_distance(_B, B) > 1e-6) {
+    printf("Solution error: ");
+    print_matrix(A);
+    printf("X\n");
+    print_matrix(X);
+    printf("=\n");
+    print_matrix(_B);
+    printf("Which is different of \n");
+    print_matrix(B);
+    return 1;
+  }
+
+  return 0;
+}
+
 worker_data worker_solve_augmented(worker_data *args) {
 
   matrix_t m = {0};
@@ -103,20 +121,7 @@ worker_data worker_solve_augmented(worker_data *args) {
 
       continue;
     }
-
-    matrix_mul(&B_LU.matrix, &A.matrix, &x);
-    if (matrix_distance(&B_LU.matrix, &B.matrix) > 1e-6) {
-      WORKER_START_PRINT;
-      printf("Solution error: ");
-      print_matrix(&A.matrix);
-      printf("X\n");
-      print_matrix(&x);
-      printf("=\n");
-      print_matrix(&B_LU.matrix);
-      printf("Which is different of \n");
-      print_matrix(&B.matrix);
-      WORKER_END_PRINT;
-    }
+    mtx_solution_check(&B_LU.matrix, &A.matrix, &B.matrix, &x);
 
     // WORKER_START_PRINT;
     // print_matrix(&m);
@@ -229,38 +234,29 @@ void matrix_random_compose() {
 int main(void) {
 
   matrix_random_compose();
+  return 1;
   srand(time(NULL));
-  matrix_t m = {0};
-  random_matrix(&m, 10, 10);
-  print_matrix(&m);
+  matrix_t A = {0};
+  random_matrix(&A, 5, 5);
+  printf("A  = ");
+  print_matrix(&A);
 
-  matrix_view_t sub1 = matrix_view_of(&m, 0, 0, 5, 5);
-  matrix_view_t sub2 = matrix_view_of(&m, 0, 4, 5, 5);
-
-  print_matrix(&sub1.matrix);
-  print_matrix(&sub2.matrix);
-
-  printf("distance = %g\n",
-         matrix_distance_each(&sub2.matrix, &sub2.matrix, &sub1.matrix));
-  print_matrix(&sub2.matrix);
-
-  matrix_view_t perm = matrix_view_of(&m, 5, 5, sub2.matrix.dy, sub2.matrix.dy);
-  if (matrix_LU_decomp(&perm.matrix, &sub1.matrix, &sub2.matrix) < 0) {
-    print_matrix(&sub1.matrix);
-    abort();
+  matrix_perm_t perm = {0};
+  matrix_t LU = A;
+  if (matrix_LU_decomp_perf(&perm, &LU, &A) < 0) {
+    print_matrix(&LU);
+    return 1;
   }
 
-  printf("LU ");
-  print_matrix(&sub1.matrix);
-  printf("Permutation ");
-  print_matrix(&perm.matrix);
+  matrix_t B = {0};
+  random_matrix(&B, 5, 2);
+  printf("B = ");
+  print_matrix(&B);
 
-  print_matrix(&m);
-
-  sub2 = matrix_view_of(&perm.matrix, 0, 0, perm.matrix.dy, perm.matrix.dx - 1);
-  if (matrix_LU_decomp(NULL, &sub2.matrix, &sub2.matrix) < 0) {
-    print_matrix(&sub1.matrix);
-    abort();
+  if (matrix_LU_solve(&B, &perm, &LU, &B) != 0) {
+    return 1;
   }
-  print_matrix(&m);
+
+  printf("X = ");
+  print_matrix(&B);
 }

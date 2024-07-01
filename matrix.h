@@ -924,7 +924,31 @@ int matrix_LU_AB_solve(matrix_t *X, const matrix_t *AB_LU) {
 // linhas.
 //
 // Falha caso o sistema seja indeterminado.
-int matrix_LU_solve(matrix_t *_X, const matrix_t *A_LU, const matrix_t *B) {}
+int matrix_LU_solve(matrix_t *_X, const matrix_perm_t *M_PERM,
+                    const matrix_t *A_LU, const matrix_t *B) {
+  MTX_ENSURE_INIT(A_LU);
+  MTX_ENSURE_INIT(B);
+
+  if (A_LU->dy != B->dy) {
+    MTX_DIMEN_ERR(B);
+  }
+
+  if (_X->data == NULL) {
+    matrix_init(_X, B->dy, B->dx);
+  } else if (!MTX_SAME_DIMENSIONS(_X, B)) {
+    MTX_DIMEN_ERR(_X);
+  }
+
+  matrix_permutate(_X, B, M_PERM);
+  if (matrix_forward_subs(_X, A_LU, _X, 1) != 0) {
+    return 1;
+  }
+  if (matrix_back_subs(_X, A_LU, _X, 0) != 0) {
+    return 1;
+  }
+
+  return 0;
+}
 
 // Calcula e retorna o grau de diferença entre as matrizes A e B. Retorna
 // sempre um número positivo, exceto na falha na qual o número retornado é
