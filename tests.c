@@ -193,25 +193,13 @@ void matrix_random_compose() {
   int checks = 80000000;
 
   int each = checks / WORKERS;
-  int d = 10;
+  int d = 6;
 
   worker_t ws[WORKERS];
 
   unsigned long all_zeros = 0;
 
   worker_data args[] = {{.ul = each}, {.i = d}};
-
-  // pthread_mutex_lock(&printf_lock);
-  // for (int i = 0; i < WORKERS; ++i) {
-  //   printf("[compose] starting a new worker (%d/%d)...\n", i + 1, WORKERS);
-  //   pthread_create(&ids[i], NULL, _worker, args);
-  // }
-  // pthread_mutex_unlock(&printf_lock);
-  // for (int i = 0; i < WORKERS; ++i) {
-  //   unsigned long zeros;
-  //   pthread_join(ids[i], (void **)(&zeros));
-  //   all_zeros += zeros;
-  // }
 
   printf("[compose] Starting solve augmented tests...");
   for (int i = 0; i < WORKERS; ++i) {
@@ -241,22 +229,38 @@ void matrix_random_compose() {
 int main(void) {
 
   matrix_random_compose();
-  matrix_t m;
-  matrix_init(&m, 3, 3);
-  double arr[] = {1, 0, 1, 0, 1, 0, 1, 1, 1};
-
-  matrix_fill_a(&m, arr);
+  srand(time(NULL));
+  matrix_t m = {0};
+  random_matrix(&m, 10, 10);
   print_matrix(&m);
 
-  matrix_t lu = {0};
-  matrix_perm_t perm = {0};
+  matrix_view_t sub1 = matrix_view_of(&m, 0, 0, 5, 5);
+  matrix_view_t sub2 = matrix_view_of(&m, 0, 4, 5, 5);
 
-  matrix_t x;
-  if (matrix_LU_decomp(&perm, &lu, &m) >= 0) {
-    print_matrix(&lu);
-    matrix_init(&x, 2, 1);
-    if(matrix_LU_AB_solve(&x, &lu) == 0){
-      print_matrix(&x);
-    }
+  print_matrix(&sub1.matrix);
+  print_matrix(&sub2.matrix);
+
+  printf("distance = %g\n",
+         matrix_distance_each(&sub2.matrix, &sub2.matrix, &sub1.matrix));
+  print_matrix(&sub2.matrix);
+
+  matrix_view_t perm = matrix_view_of(&m, 5, 5, sub2.matrix.dy, sub2.matrix.dy);
+  if (matrix_LU_decomp(&perm.matrix, &sub1.matrix, &sub2.matrix) < 0) {
+    print_matrix(&sub1.matrix);
+    abort();
   }
+
+  printf("LU ");
+  print_matrix(&sub1.matrix);
+  printf("Permutation ");
+  print_matrix(&perm.matrix);
+
+  print_matrix(&m);
+
+  sub2 = matrix_view_of(&perm.matrix, 0, 0, perm.matrix.dy, perm.matrix.dx - 1);
+  if (matrix_LU_decomp(NULL, &sub2.matrix, &sub2.matrix) < 0) {
+    print_matrix(&sub1.matrix);
+    abort();
+  }
+  print_matrix(&m);
 }

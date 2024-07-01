@@ -26,10 +26,43 @@ typedef struct matrix_view {
 
 typedef matrix_t matrix_perm_t;
 
-typedef struct vector {
-  double *m;
-  int d;
-} vector_t;
+typedef enum error_codes {
+  SUCCESS = 0,
+  NULL_ERR,
+  DIMEN_ERR,
+  INVALID_ERR,
+  BOUNDS_ERR,
+  OVERLAP_ERR,
+} mtx_error_t;
+
+#define MTX_ERROR(text, error, ...)                                            \
+  fprintf(stderr, "MTX ERROR in %s(): " text "\n", __func__, __VA_ARGS__);     \
+  abort()
+
+#define MTX_NULL_ERR(M) MTX_ERROR("matrix %s is unitialized.", NULL_ERR, #M)
+#define MTX_DIMEN_ERR(M)                                                       \
+  MTX_ERROR("matrix (%d, %d) %s has invalid dimensions.", DIMEN_ERR, (M)->dy,  \
+            (M)->dx, #M)
+#define MTX_INVALID_ERR(M) MTX_ERROR("matrix %s is invalid.", INVALID_ERR, #M)
+#define MTX_BOUNDS_ERR(M)                                                      \
+  MTX_ERROR("matrix (%d, %d) %s is out of bounds.", BOUNDS_ERR, (M)->dy,       \
+            (M)->dx, #M)
+#define MTX_OVERLAP_ERR(M1, M2)                                                \
+  MTX_ERROR("matrix (%d, %d, %d, %d) %s has a bad overlap with matrix "        \
+            "(%d, %d, %d, %d) %s.",                                            \
+            OVERLAP_ERR, (M1)->offY, (M1)->offX, (M1)->dy, (M1)->dx, #M1,      \
+            (M2)->offY, (M2)->offX, (M2)->dy, (M2)->dx, #M2)
+
+#define MTX_ENSURE_INIT(M)                                                     \
+  if ((M)->data == NULL) {                                                     \
+    MTX_NULL_ERR(M);                                                           \
+  }
+
+static mtx_error_t _error_generic(const char *s, const matrix_t *M,
+                                  mtx_error_t error) {
+  fprintf(stderr, s, M);
+  return error;
+}
 
 #define MTX_MAX_ROWS 1024
 #define MTX_MAX_COLUMNS 1024
@@ -61,7 +94,8 @@ typedef struct vector {
    (M)->dx != (M)->data->size2)
 
 #define MTX_OVERLAP_OF(M, M_OF)                                                \
-  ((M)->offY + (M)->dy >= (M_OF)->offY && (M)->offX + (M)->dx >= (M_OF)->offX)
+  ((M)->offY + (M)->dy - 1 >= (M_OF)->offY &&                                  \
+   (M)->offX + (M)->dx - 1 >= (M_OF)->offX)
 #define MTX_OVERLAP(M1, M2)                                                    \
   (MTX_ARE_SHARED(M1, M2) && (MTX_OVERLAP_OF(M1, M2) && MTX_OVERLAP_OF(M2, M1)))
 
@@ -170,61 +204,39 @@ void matrix_init_perm(matrix_perm_t *_M_PERM, int d) {
   matrix_init(_M_PERM, d, d);
   matrix_set_identity(_M_PERM);
 }
-void vector_init(vector_t *V, int d) {
-  assert(d <= MTX_MAX_COLUMNS);
 
-  V->m = (double *)malloc(sizeof(double) * d);
-  V->d = d;
-}
-
-void vector_free(vector_t *V) {
-  if (V == NULL || V->m == NULL) {
-    return;
-  }
-  free(V->m);
-}
-
-void matrix_fill_a(matrix_t *_M, double *array) {
-  assert(_M->data != NULL);
-  for (int i = 0; i < _M->dy; ++i) {
-    memcpy(matrix_row(_M, i), array, sizeof(double) * _M->dx);
-    array = &array[_M->dx];
+void matrix_fill_a(matrix_t *M, double *array) {
+  MTX_ENSURE_INIT(M);
+  for (int i = 0; i < M->dy; ++i) {
+    memcpy(matrix_row(M, i), array, sizeof(double) * M->dx);
+    array = &array[M->dx];
   }
 }
 
-void vector_fill_a(vector_t *_V, double *array) { memcpy(_V->m, array, _V->d); }
-
-void matrix_fill_m(matrix_t *_M, double **matrix) {
-  assert(_M->data != NULL && matrix != NULL);
-  assert(_M->offX == 0);
-  for (int j = 0; j < _M->dy; ++j) {
-    memcpy(_M->data->m[j], matrix[j], sizeof(double) * _M->dx);
-  }
-}
-
-void vector_fill_m(vector_t *_V, double **matrix, int dy) {
-  assert(dy <= _V->d);
-  int amt = _V->d / dy;
-  for (int i = 0; i < dy; ++i) {
-    memcpy(&_V->m[amt * i], matrix[i], amt);
+void matrix_fill_m(matrix_t *M, double **matrix) {
+  MTX_ENSURE_INIT(M);
+  for (int j = 0; j < M->dy; ++j) {
+    memcpy(M->data->m[j], matrix[j], sizeof(double) * M->dx);
   }
 }
 
 void matrix_clone(matrix_t *_M, const matrix_t *M) {
-  assert(_M != M && M->data != NULL);
+  assert(_M != M);
+  MTX_ENSURE_INIT(M);
 
   matrix_init(_M, M->dy, M->dx);
   matrix_fill_m(_M, M->data->m);
 }
 
 int matrix_copy(matrix_t *M_TO, const matrix_t *M_FROM) {
-  assert(M_FROM->data != NULL && M_TO->data != NULL);
+  MTX_ENSURE_INIT(M_FROM);
+  MTX_ENSURE_INIT(M_TO);
 
-  if (MTX_OVERLAP(M_TO, M_FROM)) {
-    return 1;
+  if (MTX_OVERLAP_AFTER(M_FROM, M_TO)) {
+    MTX_OVERLAP_ERR(M_FROM, M_TO);
   }
   if (!MTX_SAME_DIMENSIONS(M_TO, M_FROM)) {
-    return 1;
+    MTX_DIMEN_ERR(M_TO);
   }
   for (int i = 0; i < M_TO->dy; ++i) {
     memcpy(matrix_row(M_TO, i), matrix_row(M_FROM, i),
@@ -234,9 +246,9 @@ int matrix_copy(matrix_t *M_TO, const matrix_t *M_FROM) {
 }
 matrix_view_t matrix_view_of(const matrix_t *M_OF, int init_i, int init_j,
                              int dy, int dx) {
-  assert(M_OF->data != NULL);
+  MTX_ENSURE_INIT(M_OF);
   assert(init_i >= 0 && init_j >= 0);
-  assert(dy >= 0 && dy >= 0);
+  assert(dy > 0 && dx > 0);
 
   if (init_i + dy > M_OF->dy || init_j + dx > M_OF->dx) {
     return (matrix_view_t){{0}};
@@ -254,7 +266,8 @@ matrix_view_t matrix_view_of(const matrix_t *M_OF, int init_i, int init_j,
 
 int matrix_copy_from(matrix_t *M_TO, const matrix_t *M_FROM, int init_i,
                      int init_j) {
-  assert(M_FROM->data != NULL && M_TO->data != NULL);
+  MTX_ENSURE_INIT(M_FROM);
+  MTX_ENSURE_INIT(M_TO);
   assert(init_i >= 0 && init_j >= 0);
 
   // if (init_i + M_TO->dy > M_FROM->dy || init_j + M_TO->dx > M_FROM->dx) {
@@ -262,9 +275,6 @@ int matrix_copy_from(matrix_t *M_TO, const matrix_t *M_FROM, int init_i,
   // }
   matrix_view_t part_from =
       matrix_view_of(M_FROM, init_i, init_j, M_TO->dy, M_TO->dx);
-  if (part_from.matrix.data == NULL) {
-    return 1;
-  }
 
   matrix_copy(M_TO, &part_from.matrix);
 }
@@ -282,9 +292,11 @@ void print_matrix(const matrix_t *M) {
 
 int matrix_mul(matrix_t *_C, const matrix_t *A, const matrix_t *B) {
 
-  assert(A->data != NULL && B->data != NULL);
+  MTX_ENSURE_INIT(A);
+  MTX_ENSURE_INIT(B);
+
   if (A->dx != B->dy) {
-    return 1;
+    MTX_DIMEN_ERR(B);
   }
 
   if (_C->data == NULL) {
@@ -292,7 +304,7 @@ int matrix_mul(matrix_t *_C, const matrix_t *A, const matrix_t *B) {
   } else {
 
     if (_C->dx != B->dx || _C->dy != A->dy) {
-      return 1;
+      MTX_DIMEN_ERR(_C);
     }
   }
 
@@ -322,12 +334,12 @@ int matrix_mul(matrix_t *_C, const matrix_t *A, const matrix_t *B) {
 }
 
 int matrix_s_mul(matrix_t *_M, const matrix_t *M, double scalar) {
-  assert(M != NULL && M->data != NULL);
+  MTX_ENSURE_INIT(M);
 
   if (_M->data == NULL) {
     matrix_init(_M, M->dy, M->dx);
   } else if (!MTX_SAME_DIMENSIONS(_M, M)) {
-    return 1;
+    MTX_DIMEN_ERR(_M);
   }
 
   CREATE_OUTPUT_ALIAS(m_res, _M);
@@ -343,12 +355,11 @@ int matrix_s_mul(matrix_t *_M, const matrix_t *M, double scalar) {
 }
 
 int matrix_transpose(matrix_t *_M, const matrix_t *M) {
-  assert(M != NULL && M->data != NULL);
-
+  MTX_ENSURE_INIT(M);
   if (_M->data == NULL) {
     matrix_init(_M, M->dx, M->dy);
   } else if (_M->dy != M->dx || _M->dx != M->dy) {
-    return 1;
+    MTX_DIMEN_ERR(_M);
   }
 
   for (int i = 0; i < _M->dy; ++i) {
@@ -422,7 +433,8 @@ static inline void _mtx_sum_multiple(double *r, double *mul_r, double mul,
 }
 
 int matrix_equals(const matrix_t *A, const matrix_t *B) {
-  assert(A->data != NULL && B->data != NULL);
+  MTX_ENSURE_INIT(A);
+  MTX_ENSURE_INIT(B);
   if (MTX_ARE_SAME(A, B)) {
     return 1;
   }
@@ -498,8 +510,7 @@ int matrix_equals(const matrix_t *A, const matrix_t *B) {
 
 int matrix_LU_decomposition(matrix_perm_t *__M_PERM, matrix_t *_M_LU,
                             const matrix_t *M, int perfect) {
-  assert(M->data != NULL);
-
+  MTX_ENSURE_INIT(M);
   // caso perfect == true, linhas zeradas serão consideradas erro. Com dx <
   // dy, isso inevitavelmente ocorrerá.
   if (perfect && M->dx < M->dy) {
@@ -509,7 +520,7 @@ int matrix_LU_decomposition(matrix_perm_t *__M_PERM, matrix_t *_M_LU,
   if (_M_LU->data == NULL) {
     matrix_clone(_M_LU, M);
   } else if (!MTX_ARE_SAME(_M_LU, M) && matrix_copy(_M_LU, M) != 0) {
-    return -1;
+    MTX_DIMEN_ERR(_M_LU);
   }
 
   int permutate = 0;
@@ -521,7 +532,7 @@ int matrix_LU_decomposition(matrix_perm_t *__M_PERM, matrix_t *_M_LU,
                __M_PERM->dy == _M_LU->dy) {
       matrix_set_identity(__M_PERM);
     } else {
-      return -1;
+      MTX_INVALID_ERR(__M_PERM);
     }
   }
 
@@ -648,18 +659,20 @@ int matrix_LU_decomposition(matrix_perm_t *__M_PERM, matrix_t *_M_LU,
 // final é o mesmo de M_PERM x M, porém é mais otimizado para tal.
 int matrix_permutate(matrix_t *_M, const matrix_t *M,
                      const matrix_perm_t *M_PERM) {
-  assert(M->data != NULL && M_PERM->data != NULL);
+  MTX_ENSURE_INIT(M);
+  MTX_ENSURE_INIT(M_PERM);
+
   assert(MTX_IS_SQUARE(M_PERM));
 
   if (M_PERM->dy != M->dy) {
-    return 1;
+    MTX_DIMEN_ERR(M);
   }
 
   if (_M->data == NULL) {
     matrix_init(_M, M->dy, M->dx);
   }
   if (!MTX_SAME_DIMENSIONS(_M, M)) {
-    return 1;
+    MTX_DIMEN_ERR(_M);
   }
 
   CREATE_OUTPUT_ALIAS(permutated, _M);
@@ -693,8 +706,8 @@ int matrix_permutate(matrix_t *_M, const matrix_t *M,
 // decomposta: undefined behavior. Recomendado usar somente combinado com
 // matrix_LU_decomp_perf().
 double matrix_det_LU(const matrix_t *M_LU, int signum) {
-  assert(M_LU->data != NULL);
 
+  MTX_ENSURE_INIT(M_LU);
   double det = 1;
   if (signum >= 0) {
 
@@ -715,10 +728,9 @@ double matrix_det_LU(const matrix_t *M_LU, int signum) {
 // Calcula o determinante de uma dada matriz quadrada M. Retorna zero se a
 // matriz não for quadrada (para mxn e n > m, use matrix_det_LU()).
 double matrix_det(const matrix_t *M) {
-  assert(M->data != NULL);
-
+  MTX_ENSURE_INIT(M);
   if (!MTX_IS_SQUARE(M)) {
-    return 0;
+    MTX_DIMEN_ERR(M);
   }
 
   matrix_t lu = {0};
@@ -751,9 +763,10 @@ double matrix_det(const matrix_t *M) {
 // O resultado (x) é retornada na matriz X.
 int matrix_back_subs(matrix_t *_X, const matrix_t *U, const matrix_t *B,
                      int jordan) {
-  assert(U->data != NULL && B->data != NULL);
+  MTX_ENSURE_INIT(U);
+  MTX_ENSURE_INIT(B);
   if (!MTX_IS_SQUARE(U) || U->dy != B->dy) {
-    return 1;
+    MTX_DIMEN_ERR(U);
   }
 
   int dx = U->dx;
@@ -768,7 +781,7 @@ int matrix_back_subs(matrix_t *_X, const matrix_t *U, const matrix_t *B,
   if (_X->data == NULL) {
     matrix_init(_X, var_num, B->dx);
   } else if (!MTX_SAME_DIMENSIONS(_X, B)) {
-    return 1;
+    MTX_DIMEN_ERR(_X);
   }
 
   CREATE_OUTPUT_ALIAS(x, _X);
@@ -809,15 +822,15 @@ int matrix_back_subs(matrix_t *_X, const matrix_t *U, const matrix_t *B,
 int matrix_forward_subs(matrix_t *_X, const matrix_t *L, const matrix_t *B,
                         int jordan) {
 
-  assert(L->data != NULL && B->data != NULL);
-
+  MTX_ENSURE_INIT(L);
+  MTX_ENSURE_INIT(B);
   if (B->dy != L->dy) {
-    return 1;
+    MTX_DIMEN_ERR(L);
   }
   if (_X->data == NULL) {
     matrix_init(_X, B->dy, B->dx);
   } else if (!MTX_SAME_DIMENSIONS(_X, B)) {
-    return 1;
+    MTX_DIMEN_ERR(_X);
   }
 
   int dx = L->dx;
@@ -877,12 +890,12 @@ int matrix_forward_subs(matrix_t *_X, const matrix_t *L, const matrix_t *B,
 // Falha caso o sistema seja impossível, indeterminado ou caso não seja
 // possível separar A de B (X-dx > A_LU->dx - 1).
 int matrix_LU_AB_solve(matrix_t *X, const matrix_t *AB_LU) {
-  assert(AB_LU->data != NULL);
-  assert(X->data != NULL);
 
+  MTX_ENSURE_INIT(AB_LU);
+  MTX_ENSURE_INIT(X);
   int var_num = AB_LU->dx - X->dx;
   if (var_num < 1 || X->dy < var_num) {
-    return 1;
+    MTX_BOUNDS_ERR(X);
   }
 
   matrix_view_t B = matrix_view_of(AB_LU, 0, var_num, AB_LU->dy, X->dx);
@@ -917,10 +930,11 @@ int matrix_LU_solve(matrix_t *_X, const matrix_t *A_LU, const matrix_t *B) {}
 // sempre um número positivo, exceto na falha na qual o número retornado é
 // negativo.
 double matrix_distance(const matrix_t *A, const matrix_t *B) {
-  assert(A->data != NULL && B->data != NULL);
 
+  MTX_ENSURE_INIT(A);
+  MTX_ENSURE_INIT(B);
   if (!MTX_SAME_DIMENSIONS(A, B)) {
-    return -1;
+    MTX_DIMEN_ERR(B);
   }
   if (MTX_ARE_SAME(A, B)) {
     return 0;
@@ -947,10 +961,11 @@ double matrix_distance(const matrix_t *A, const matrix_t *B) {
 // ser ignorado.
 double matrix_distance_each(matrix_t *_M_D, const matrix_t *A,
                             const matrix_t *B) {
-  assert(A->data != NULL && B->data != NULL);
 
+  MTX_ENSURE_INIT(A);
+  MTX_ENSURE_INIT(B);
   if (!MTX_SAME_DIMENSIONS(A, B)) {
-    return -1;
+    MTX_DIMEN_ERR(A);
   }
   if (MTX_ARE_SAME(A, B)) {
     return 0;
@@ -959,6 +974,7 @@ double matrix_distance_each(matrix_t *_M_D, const matrix_t *A,
   if (_M_D->data == NULL) {
     matrix_init(_M_D, A->dy, A->dx);
   } else if (!MTX_SAME_DIMENSIONS(_M_D, A)) {
+    MTX_DIMEN_ERR(_M_D);
     return -1;
   }
 
@@ -977,21 +993,24 @@ double matrix_distance_each(matrix_t *_M_D, const matrix_t *A,
     }
   }
 
+  COMMIT_OUTPUT(m_d, _M_D);
+
   return dt;
 }
 
 #define DEF_MTX_SIMPLE_OP(name, operation)                                     \
   int matrix_##name(matrix_t *_C, matrix_t *A, matrix_t *B) {                  \
-    assert(A->data != NULL && B->data != NULL);                                \
                                                                                \
+    MTX_ENSURE_INIT(A);                                                        \
+    MTX_ENSURE_INIT(B);                                                        \
     if (!MTX_SAME_DIMENSIONS(A, B)) {                                          \
-      return 1;                                                                \
+      MTX_DIMEN_ERR(A);                                                        \
     }                                                                          \
                                                                                \
     if (_C->data == NULL) {                                                    \
       matrix_init(_C, A->dy, A->dx);                                           \
     } else if (!MTX_SAME_DIMENSIONS(_C, A)) {                                  \
-      return 1;                                                                \
+      MTX_DIMEN_ERR(_C);                                                       \
     }                                                                          \
                                                                                \
     for (int i = 0; i < A->dy; ++i) {                                          \
