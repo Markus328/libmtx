@@ -12,6 +12,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "linalg.h"
 
 void print_gsl_matrix(gsl_matrix *gsl) {
   printf("matrix (%lu, %lu):\n", gsl->size1, gsl->size2);
@@ -22,12 +23,12 @@ void print_gsl_matrix(gsl_matrix *gsl) {
     printf("\n");
   }
 }
-void copy_to_gsl_matrix(gsl_matrix *gsl, matrix_t *m) {
+void copy_to_gsl_matrix(gsl_matrix *gsl, mtx_matrix_t *m) {
   assert(m->dx == gsl->size2 && m->dy == gsl->size1);
 
   for (int i = 0; i < m->dy; ++i) {
     for (int j = 0; j < m->dx; ++j) {
-      gsl_matrix_set(gsl, i, j, matrix_at(m, i, j));
+      gsl_matrix_set(gsl, i, j, mtx_matrix_at(m, i, j));
     }
   }
 }
@@ -47,13 +48,13 @@ static double get_rnd_dbl(int min_exp, int max_exp, struct rnd_buffer *rnd) {
 }
 
 // Variante de random_matrix para usar em testes pesados multithreading.
-void t_random_matrix(matrix_t *_M, int dy, int dx, struct rnd_buffer *rnd) {
+void t_random_matrix(mtx_matrix_t *_M, int dy, int dx, struct rnd_buffer *rnd) {
   rnd_prepare_chars(rnd, dy * dx);
 
   dy = dy > 0 ? dy : rnd_next_uchar(rnd) % 25;
   dx = dx > 0 ? dx : rnd_next_uchar(rnd) % 25;
   if (_M->data == NULL) {
-    matrix_init(_M, dy, dx);
+    mtx_matrix_init(_M, dy, dx);
   } else if (_M->dy != dy || _M->dx != dx) {
     fprintf(stderr, "Error of dimensions in t_random_matrix()!\n");
     abort();
@@ -61,7 +62,7 @@ void t_random_matrix(matrix_t *_M, int dy, int dx, struct rnd_buffer *rnd) {
 
   for (int i = 0; i < dy; ++i) {
     for (int j = 0; j < dx; ++j) {
-      matrix_at(_M, i, j) = get_rnd_dbl(-512, 512, rnd);
+      mtx_matrix_at(_M, i, j) = get_rnd_dbl(-512, 512, rnd);
     }
   }
 }
@@ -69,10 +70,10 @@ void t_random_matrix(matrix_t *_M, int dy, int dx, struct rnd_buffer *rnd) {
 // Máximo the threads a usar.
 #define WORKERS 8
 
-int mtx_solution_check(matrix_t *_B, const matrix_t *A, const matrix_t *B,
-                       const matrix_t *X) {
-  matrix_mul(_B, A, X);
-  if (matrix_distance(_B, B) > 1e-6) {
+int mtx_solution_check(mtx_matrix_t *_B, const mtx_matrix_t *A, const mtx_matrix_t *B,
+                       const mtx_matrix_t *X) {
+  mtx_matrix_mul(_B, A, X);
+  if (mtx_matrix_distance(_B, B) > 1e-6) {
     printf("Solution error: ");
     print_matrix(A);
     printf("X\n");
@@ -89,9 +90,9 @@ int mtx_solution_check(matrix_t *_B, const matrix_t *A, const matrix_t *B,
 
 worker_data worker_solve_augmented(worker_data *args) {
 
-  matrix_t m = {0};
+  mtx_matrix_t m = {0};
   gsl_matrix *gsl_m;
-  matrix_t lu = {0};
+  mtx_matrix_t lu = {0};
 
   unsigned long total = WORKER_NEXT_ARG(ul);
   int d = WORKER_NEXT_ARG(i);
@@ -104,22 +105,22 @@ worker_data worker_solve_augmented(worker_data *args) {
 
   unsigned long zeros = 0;
 
-  matrix_t x = {0};
-  matrix_init(&x, dy, 1);
+  mtx_matrix_t x = {0};
+  mtx_matrix_init(&x, dy, 1);
   gsl_m = gsl_matrix_alloc(dy, dx);
 
-  matrix_init(&m, dy, dx);
-  matrix_init(&lu, dy, dx);
+  mtx_matrix_init(&m, dy, dx);
+  mtx_matrix_init(&lu, dy, dx);
 
-  matrix_view_t A = matrix_view_of(&m, 0, 0, dy, dx - 1);
-  matrix_view_t B = matrix_view_of(&m, 0, dx - 1, dy, 1);
-  matrix_view_t B_LU = matrix_view_of(&lu, 0, dx - 1, dy, 1);
+  mtx_matrix_view_t A = mtx_matrix_view_of(&m, 0, 0, dy, dx - 1);
+  mtx_matrix_view_t B = mtx_matrix_view_of(&m, 0, dx - 1, dy, 1);
+  mtx_matrix_view_t B_LU = mtx_matrix_view_of(&lu, 0, dx - 1, dy, 1);
 
   for (unsigned long i = 0; i < total; ++i) {
     t_random_matrix(&m, dy, dx, rnd_buf);
 
-    if (matrix_LU_decomp_perf(NULL, &lu, &m) < 0 ||
-        matrix_LU_AB_solve(&x, &lu) != 0) {
+    if (mtx_linalg_LU_decomp_perf(NULL, &lu, &m) < 0 ||
+        mtx_linalg_LU_AB_solve(&x, &lu) != 0) {
       zeros++;
       WORKER_START_PRINT;
       printf("no solution for matrix(%d, %d):\n", dy, dx);
@@ -137,8 +138,8 @@ worker_data worker_solve_augmented(worker_data *args) {
     // WORKER_END_PRINT;
   }
 
-  matrix_free(&m);
-  matrix_free(&lu);
+  mtx_matrix_free(&m);
+  mtx_matrix_free(&lu);
   rnd_free(rnd_buf);
 
   return (worker_data){.ul = zeros};
@@ -156,24 +157,24 @@ worker_data test_decomposition(worker_data *args) {
 
   struct rnd_buffer *buf = rnd_alloc_uchars(dx * dy * count);
 
-  matrix_t m = {0};
-  matrix_t lu = {0};
-  matrix_t perm = {0};
-  matrix_t re_decomp = {0};
+  mtx_matrix_t m = {0};
+  mtx_matrix_t lu = {0};
+  mtx_matrix_t perm = {0};
+  mtx_matrix_t re_decomp = {0};
   for (unsigned long i = 0; i < count; ++i) {
     t_random_matrix(&m, dy, dx, buf);
 
-    if (matrix_LU_decomp(&perm, &lu, &m) < 0) {
+    if (mtx_linalg_LU_decomp(&perm, &lu, &m) < 0) {
       continue;
     }
 
-    matrix_permutate(&re_decomp, &m, &perm);
-    matrix_forward_subs(&re_decomp, &lu, &re_decomp, 1);
+    mtx_linalg_permutate(&re_decomp, &m, &perm);
+    mtx_linalg_forward_subs(&re_decomp, &lu, &re_decomp, 1);
 
     double dt = 0;
     for (int ui = 0; ui < lu.dy; ++ui) {
       for (int uj = ui; uj < lu.dx; ++uj) {
-        dt += _mod(matrix_at(&re_decomp, ui, uj) - matrix_at(&lu, ui, uj));
+        dt += _mod(mtx_matrix_at(&re_decomp, ui, uj) - mtx_matrix_at(&lu, ui, uj));
       }
     }
     if (dt > 0) {
@@ -192,16 +193,16 @@ worker_data test_decomposition(worker_data *args) {
     }
   }
 
-  matrix_free(&m);
-  matrix_free(&lu);
-  matrix_free(&perm);
-  matrix_free(&re_decomp);
+  mtx_matrix_free(&m);
+  mtx_matrix_free(&lu);
+  mtx_matrix_free(&perm);
+  mtx_matrix_free(&re_decomp);
   rnd_free(buf);
 
   return (worker_data){.ul = errors};
 }
 
-void matrix_random_compose() {
+void mtx_matrix_random_compose() {
   int checks = 80000000;
 
   int each = checks / WORKERS;
@@ -238,39 +239,39 @@ void matrix_random_compose() {
          all_errors);
 }
 
-static int test_refine_mtx(const matrix_t *M, double *distance) {
-  matrix_perm_t perm = {0};
-  matrix_t lu = {0};
-  if (matrix_LU_decomp_perf(&perm, &lu, M) < 0) {
+static int test_refine_mtx(const mtx_matrix_t *M, double *distance) {
+  mtx_matrix_perm_t perm = {0};
+  mtx_matrix_t lu = {0};
+  if (mtx_linalg_LU_decomp_perf(&perm, &lu, M) < 0) {
     fprintf(stderr, "No solution for matrix (%d, %d):\n", M->dy, M->dx);
-    matrix_fprintf(stderr, M);
+    mtx_matrix_fprintf(stderr, M);
     fputc('\n', stderr);
     abort();
   }
 
-  matrix_view_t A = matrix_view_of(M, 0, 0, M->dy, M->dx - 1);
-  matrix_view_t B = matrix_column_of(M, M->dx - 1);
-  matrix_view_t A_LU = matrix_view_of(&lu, 0, 0, M->dy, M->dx - 1);
-  matrix_view_t X = matrix_column_of(&lu, M->dx - 1);
+  mtx_matrix_view_t A = mtx_matrix_view_of(M, 0, 0, M->dy, M->dx - 1);
+  mtx_matrix_view_t B = mtx_matrix_column_of(M, M->dx - 1);
+  mtx_matrix_view_t A_LU = mtx_matrix_view_of(&lu, 0, 0, M->dy, M->dx - 1);
+  mtx_matrix_view_t X = mtx_matrix_column_of(&lu, M->dx - 1);
 
-  matrix_LU_AB_solve(&X.matrix, &lu);
+  mtx_linalg_LU_AB_solve(&X.matrix, &lu);
 
-  matrix_t work = {0};
+  mtx_matrix_t work = {0};
 
   double dt = -1, dn;
-  matrix_t new_X = {0};
-  matrix_clone(&new_X, &X.matrix);
+  mtx_matrix_t new_X = {0};
+  mtx_matrix_clone(&new_X, &X.matrix);
   while (1) {
     printf("X = ");
     print_matrix(&X.matrix);
 
-    double dn = matrix_LU_refine(&work, &new_X, &perm, &A_LU.matrix, &A.matrix,
+    double dn = mtx_linalg_LU_refine(&work, &new_X, &perm, &A_LU.matrix, &A.matrix,
                                  &B.matrix);
-    if (dt == dn && matrix_equals(&X.matrix, &new_X)) {
+    if (dt == dn && mtx_matrix_equals(&X.matrix, &new_X)) {
       break;
     }
     dt = dn;
-    matrix_copy(&X.matrix, &new_X);
+    mtx_matrix_copy(&X.matrix, &new_X);
     printf("distance = %g\n", dt);
     print_matrix(M);
     if (dt < 1) {
@@ -278,9 +279,9 @@ static int test_refine_mtx(const matrix_t *M, double *distance) {
     }
   }
 
-  matrix_free(&lu);
-  matrix_free(&perm);
-  matrix_free(&work);
+  mtx_matrix_free(&lu);
+  mtx_matrix_free(&perm);
+  mtx_matrix_free(&work);
 
   return 0;
 }
@@ -308,9 +309,9 @@ static int test_refine_gsl(gsl_matrix *gm) {
 
 int main(void) {
 
-  // matrix_random_compose();
-  matrix_t m;
-  matrix_init(&m, 5, 6);
+  // mtx_matrix_random_compose();
+  mtx_matrix_t m;
+  mtx_matrix_init(&m, 5, 6);
 
   FILE *fd = fopen("./test-refine.txt", "r");
   if (fd == NULL) {
@@ -318,7 +319,7 @@ int main(void) {
     t_random_matrix(&m, 5, 6, buf);
     rnd_free(buf);
   } else {
-    matrix_fread(fd, &m);
+    mtx_matrix_fread(fd, &m);
     fclose(fd);
   }
   printf("just read ");
@@ -330,6 +331,6 @@ int main(void) {
   test_refine_mtx(&m, &dt_mtx);
   test_refine_gsl(gm);
 
-  matrix_free(&m);
+  mtx_matrix_free(&m);
   gsl_matrix_free(gm);
 }
