@@ -216,7 +216,7 @@ void matrix_fill_a(matrix_t *M, double *array) {
 void matrix_fill_m(matrix_t *M, double **matrix) {
   MTX_ENSURE_INIT(M);
   for (int j = 0; j < M->dy; ++j) {
-    memcpy(M->data->m[j], matrix[j], sizeof(double) * M->dx);
+    memcpy(matrix_row(M, j), matrix[j], sizeof(double) * M->dx);
   }
 }
 
@@ -225,7 +225,10 @@ void matrix_clone(matrix_t *_M, const matrix_t *M) {
   MTX_ENSURE_INIT(M);
 
   matrix_init(_M, M->dy, M->dx);
-  matrix_fill_m(_M, M->data->m);
+
+  for (int j = 0; j < _M->dy; ++j) {
+    memcpy(matrix_row(_M, j), matrix_row(M, j), sizeof(double) * _M->dx);
+  }
 }
 
 int matrix_copy(matrix_t *M_TO, const matrix_t *M_FROM) {
@@ -251,7 +254,7 @@ matrix_view_t matrix_view_of(const matrix_t *M_OF, int init_i, int init_j,
   assert(dy > 0 && dx > 0);
 
   if (init_i + dy > M_OF->dy || init_j + dx > M_OF->dx) {
-    return (matrix_view_t){{0}};
+    MTX_BOUNDS_ERR(M_OF);
   }
 
   matrix_t mtx;
@@ -263,6 +266,9 @@ matrix_view_t matrix_view_of(const matrix_t *M_OF, int init_i, int init_j,
 
   return (matrix_view_t){.matrix = mtx};
 }
+
+#define matrix_column_of(M_OF, j) matrix_view_of(M_OF, 0, j, (M_OF)->dy, 1)
+#define matrix_row_of(M_OF, i) matrix_view_of(M_OF, i, 0, 1, (M_OF)->dx)
 
 int matrix_copy_from(matrix_t *M_TO, const matrix_t *M_FROM, int init_i,
                      int init_j) {
@@ -287,6 +293,23 @@ void print_matrix(const matrix_t *M) {
       printf("%g ", matrix_at(M, i, j));
     }
     printf("\n");
+  }
+}
+void matrix_fprintf(FILE *stream, const matrix_t *M) {
+
+  for (int i = 0; i < M->dy; ++i) {
+    for (int j = 0; j < M->dx; ++j) {
+      fprintf(stream, "%g ", matrix_at(M, i, j));
+    }
+    fprintf(stream, "\n");
+  }
+}
+
+void matrix_fread(FILE *stream, matrix_t *_M) {
+  for (int i = 0; i < _M->dy; ++i) {
+    for (int j = 0; j < _M->dx; ++j) {
+      fscanf(stream, "%lf", &matrix_at(_M, i, j));
+    }
   }
 }
 
@@ -1021,7 +1044,6 @@ double matrix_distance_each(matrix_t *_M_D, const matrix_t *A,
 
   return dt;
 }
-
 #define DEF_MTX_SIMPLE_OP(name, operation)                                     \
   int matrix_##name(matrix_t *_C, matrix_t *A, matrix_t *B) {                  \
                                                                                \
@@ -1045,7 +1067,34 @@ double matrix_distance_each(matrix_t *_M_D, const matrix_t *A,
     return 0;                                                                  \
   }
 
-DEF_MTX_SIMPLE_OP(add, +)
-DEF_MTX_SIMPLE_OP(sub, -)
+DEF_MTX_SIMPLE_OP(add, +);
+DEF_MTX_SIMPLE_OP(sub, -);
+
+// Refina a solução do sistema linear Ax = B. Recebe _M_WORK como matriz para
+// cálculos intermediários, X a solução atual, M_PERM e A_LU como sendo a matriz
+// de permutação e A decomposto e por fim a matriz A e B originais. No fim da
+// execução, X será substituído por uma versão mais próxima da solução exata.
+//
+//
+// Dado que a resolução de um sistema linear que gerou resíduos: Ax' = B + B', a
+// função retorna a distancia entre B e B', indicando o grau de distancia que a
+// solução exata x tem de x'.
+double matrix_LU_refine(matrix_t *_M_WORK, matrix_t *X,
+                        const matrix_perm_t *M_PERM, const matrix_t *A_LU,
+                        const matrix_t *A, const matrix_t *B) {
+
+  matrix_mul(_M_WORK, A, X);
+  double dt;
+  if ((dt = matrix_distance_each(_M_WORK, _M_WORK, B)) == 0) {
+    return 0;
+  }
+
+  if (matrix_LU_solve(_M_WORK, M_PERM, A_LU, _M_WORK) != 0) {
+    MTX_INVALID_ERR(X);
+  }
+  matrix_sub(X, X, _M_WORK);
+
+  return dt;
+}
 
 #endif

@@ -5,8 +5,10 @@
 #include "tests/rnd.h"
 #include "tests/workers.h"
 #include <assert.h>
+#include <float.h>
 #include <gsl/gsl_linalg.h>
 #include <gsl/gsl_matrix.h>
+#include <math.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,34 +32,39 @@ void copy_to_gsl_matrix(gsl_matrix *gsl, matrix_t *m) {
   }
 }
 
-/* "template" para função de matriz aleatória */
-#define DEF_RND_MTX(RND)                                                       \
-  dx = dx > 0 ? dx : RND % 25 + 1;                                             \
-  dy = dy > 0 ? dy : RND % 25 + 1;                                             \
-                                                                               \
-  if (_M->data == NULL) {                                                      \
-    matrix_init(_M, dy, dx);                                                   \
-  } else if (_M->dx != dx || _M->dy != dy) {                                   \
-    printf("Invalid matrix in random_matrix()!\n");                            \
-    return;                                                                    \
-  }                                                                            \
-                                                                               \
-  for (int i = 0; i < dy; ++i) {                                               \
-    for (int j = 0; j < dx; ++j) {                                             \
-      matrix_at(_M, i, j) = RND % 10;                                          \
-    }                                                                          \
+static double get_rnd_dbl(int min_exp, int max_exp, struct rnd_buffer *rnd) {
+  assert(min_exp <= max_exp);
+
+  double d = rnd_next_dbl(rnd);
+
+  int xp;
+  double _d = frexp(d, &xp);
+  if (xp < min_exp || xp > max_exp) {
+    d = 0;
   }
 
-// Usar somente em single thread.
-void random_matrix(matrix_t *_M, int dy, int dx) { DEF_RND_MTX(rand()) }
+  return d;
+}
 
 // Variante de random_matrix para usar em testes pesados multithreading.
 void t_random_matrix(matrix_t *_M, int dy, int dx, struct rnd_buffer *rnd) {
   rnd_prepare_chars(rnd, dy * dx);
-  DEF_RND_MTX(rnd_next_char(rnd))
-}
 
-#undef DEF_RND_MTX
+  dy = dy > 0 ? dy : rnd_next_uchar(rnd) % 25;
+  dx = dx > 0 ? dx : rnd_next_uchar(rnd) % 25;
+  if (_M->data == NULL) {
+    matrix_init(_M, dy, dx);
+  } else if (_M->dy != dy || _M->dx != dx) {
+    fprintf(stderr, "Error of dimensions in t_random_matrix()!\n");
+    abort();
+  }
+
+  for (int i = 0; i < dy; ++i) {
+    for (int j = 0; j < dx; ++j) {
+      matrix_at(_M, i, j) = get_rnd_dbl(-512, 512, rnd);
+    }
+  }
+}
 
 // Máximo the threads a usar.
 #define WORKERS 8
@@ -231,32 +238,98 @@ void matrix_random_compose() {
          all_errors);
 }
 
+static int test_refine_mtx(const matrix_t *M, double *distance) {
+  matrix_perm_t perm = {0};
+  matrix_t lu = {0};
+  if (matrix_LU_decomp_perf(&perm, &lu, M) < 0) {
+    fprintf(stderr, "No solution for matrix (%d, %d):\n", M->dy, M->dx);
+    matrix_fprintf(stderr, M);
+    fputc('\n', stderr);
+    abort();
+  }
+
+  matrix_view_t A = matrix_view_of(M, 0, 0, M->dy, M->dx - 1);
+  matrix_view_t B = matrix_column_of(M, M->dx - 1);
+  matrix_view_t A_LU = matrix_view_of(&lu, 0, 0, M->dy, M->dx - 1);
+  matrix_view_t X = matrix_column_of(&lu, M->dx - 1);
+
+  matrix_LU_AB_solve(&X.matrix, &lu);
+
+  matrix_t work = {0};
+
+  double dt = -1, dn;
+  matrix_t new_X = {0};
+  matrix_clone(&new_X, &X.matrix);
+  while (1) {
+    printf("X = ");
+    print_matrix(&X.matrix);
+
+    double dn = matrix_LU_refine(&work, &new_X, &perm, &A_LU.matrix, &A.matrix,
+                                 &B.matrix);
+    if (dt == dn && matrix_equals(&X.matrix, &new_X)) {
+      break;
+    }
+    dt = dn;
+    matrix_copy(&X.matrix, &new_X);
+    printf("distance = %g\n", dt);
+    print_matrix(M);
+    if (dt < 1) {
+      break;
+    }
+  }
+
+  matrix_free(&lu);
+  matrix_free(&perm);
+  matrix_free(&work);
+
+  return 0;
+}
+
+static int test_refine_gsl(gsl_matrix *gm) {
+  gsl_permutation *perm = gsl_permutation_alloc(gm->size1);
+
+  int signum;
+  gsl_matrix_view A = gsl_matrix_submatrix(gm, 0, 0, gm->size1, gm->size2 - 1);
+  gsl_matrix *LU = gsl_matrix_alloc_from_matrix(&A.matrix, 0, 0, A.matrix.size1,
+                                                A.matrix.size2);
+  gsl_linalg_LU_decomp(LU, perm, &signum);
+
+  gsl_vector_view B = gsl_matrix_column(gm, gm->size2 - 1);
+
+  gsl_vector *x = gsl_vector_alloc(A.matrix.size1);
+  gsl_linalg_LU_solve(LU, perm, &B.vector, x);
+  gsl_vector *work = gsl_vector_alloc(A.matrix.size1);
+  gsl_linalg_LU_refine(&A.matrix, LU, perm, &B.vector, x, work);
+  printf("GSL X = vector(%ld):\n", x->size);
+  gsl_vector_fprintf(stdout, x, "%g");
+
+  return 0;
+}
+
 int main(void) {
 
-  matrix_random_compose();
-  return 1;
-  srand(time(NULL));
-  matrix_t A = {0};
-  random_matrix(&A, 5, 5);
-  printf("A  = ");
-  print_matrix(&A);
+  // matrix_random_compose();
+  matrix_t m;
+  matrix_init(&m, 5, 6);
 
-  matrix_perm_t perm = {0};
-  matrix_t LU = A;
-  if (matrix_LU_decomp_perf(&perm, &LU, &A) < 0) {
-    print_matrix(&LU);
-    return 1;
+  FILE *fd = fopen("./test-refine.txt", "r");
+  if (fd == NULL) {
+    struct rnd_buffer *buf = rnd_alloc_dbls(5 * 6);
+    t_random_matrix(&m, 5, 6, buf);
+    rnd_free(buf);
+  } else {
+    matrix_fread(fd, &m);
+    fclose(fd);
   }
+  printf("just read ");
+  print_matrix(&m);
+  gsl_matrix *gm = gsl_matrix_alloc(5, 6);
+  copy_to_gsl_matrix(gm, &m);
 
-  matrix_t B = {0};
-  random_matrix(&B, 5, 2);
-  printf("B = ");
-  print_matrix(&B);
+  double dt_mtx = 0;
+  test_refine_mtx(&m, &dt_mtx);
+  test_refine_gsl(gm);
 
-  if (matrix_LU_solve(&B, &perm, &LU, &B) != 0) {
-    return 1;
-  }
-
-  printf("X = ");
-  print_matrix(&B);
+  matrix_free(&m);
+  gsl_matrix_free(gm);
 }
