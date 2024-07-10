@@ -817,16 +817,16 @@ int matrix_back_subs(matrix_t *_X, const matrix_t *U, const matrix_t *B,
   double *X_i;
   for (int i = var_num - 1; i >= 0; --i) {
     U_i = matrix_row(U, i);
-    X_i = matrix_row(_X, i);
+    X_i = matrix_row(&x, i);
 
-    _mtx_row_copy(X_i, matrix_row(B, i), _X->dx);
+    _mtx_row_copy(X_i, matrix_row(B, i), x.dx);
     for (int j = i + 1; j < var_num; ++j) {
-      _mtx_sum_multiple(X_i, matrix_row(_X, j), -U_i[j], 0, _X->dx);
+      _mtx_sum_multiple(X_i, matrix_row(&x, j), -U_i[j], 0, x.dx);
     }
 
     if (!jordan) {
       double pivot = U_i[i];
-      _mtx_row_mul(matrix_row(_X, i), 1.0 / pivot, _X->dx);
+      _mtx_row_mul(matrix_row(&x, i), 1.0 / pivot, x.dx);
     }
   }
 
