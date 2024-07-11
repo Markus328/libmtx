@@ -143,15 +143,10 @@ int mtx_matrix_copy_from(mtx_matrix_t *M_TO, const mtx_matrix_t *M_FROM,
   return 0;
 }
 
-void print_matrix(const mtx_matrix_t *M) {
+void mtx_matrix_print(const mtx_matrix_t *M) {
 
   printf("matrix (%u, %u):\n", M->dy, M->dx);
-  for (int i = 0; i < M->dy; ++i) {
-    for (int j = 0; j < M->dx; ++j) {
-      printf("%g ", mtx_matrix_at(M, i, j));
-    }
-    printf("\n");
-  }
+  mtx_matrix_fprintf(stdout, M);
 }
 void mtx_matrix_fprintf(FILE *stream, const mtx_matrix_t *M) {
 
