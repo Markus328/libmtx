@@ -75,13 +75,13 @@ int mtx_solution_check(mtx_matrix_t *_B, const mtx_matrix_t *A, const mtx_matrix
   mtx_matrix_mul(_B, A, X);
   if (mtx_matrix_distance(_B, B) > 1e-6) {
     printf("Solution error: ");
-    print_matrix(A);
+    mtx_matrix_print(A);
     printf("X\n");
-    print_matrix(X);
+    mtx_matrix_print(X);
     printf("=\n");
-    print_matrix(_B);
+    mtx_matrix_print(_B);
     printf("Which is different of \n");
-    print_matrix(B);
+    mtx_matrix_print(B);
     return 1;
   }
 
@@ -124,7 +124,7 @@ worker_data worker_solve_augmented(worker_data *args) {
       zeros++;
       WORKER_START_PRINT;
       printf("no solution for matrix(%d, %d):\n", dy, dx);
-      print_matrix(&m);
+      mtx_matrix_print(&m);
       WORKER_END_PRINT;
 
       continue;
@@ -182,12 +182,12 @@ worker_data test_decomposition(worker_data *args) {
 
       errors++;
       printf("re-decomposition failed for ");
-      print_matrix(&m);
+      mtx_matrix_print(&m);
 
       printf("Expected:\n");
-      print_matrix(&lu);
+      mtx_matrix_print(&lu);
       printf("Got:\n");
-      print_matrix(&re_decomp);
+      mtx_matrix_print(&re_decomp);
 
       WORKER_END_PRINT;
     }
@@ -263,7 +263,7 @@ static int test_refine_mtx(const mtx_matrix_t *M, double *distance) {
   mtx_matrix_clone(&new_X, &X.matrix);
   while (1) {
     printf("X = ");
-    print_matrix(&X.matrix);
+    mtx_matrix_print(&X.matrix);
 
     double dn = mtx_linalg_LU_refine(&work, &new_X, &perm, &A_LU.matrix, &A.matrix,
                                  &B.matrix);
@@ -273,7 +273,7 @@ static int test_refine_mtx(const mtx_matrix_t *M, double *distance) {
     dt = dn;
     mtx_matrix_copy(&X.matrix, &new_X);
     printf("distance = %g\n", dt);
-    print_matrix(M);
+    mtx_matrix_print(M);
     if (dt < 1) {
       break;
     }
@@ -323,7 +323,7 @@ int main(void) {
     fclose(fd);
   }
   printf("just read ");
-  print_matrix(&m);
+  mtx_matrix_print(&m);
   gsl_matrix *gm = gsl_matrix_alloc(5, 6);
   copy_to_gsl_matrix(gm, &m);
 

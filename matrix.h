@@ -116,7 +116,7 @@ int mtx_matrix_copy_from(mtx_matrix_t *M_TO, const mtx_matrix_t *M_FROM,
                          int init_i, int init_j);
 
 // Escreve a matriz M para o stdout com o prefixo indicando as dimensões dela.
-void print_matrix(const mtx_matrix_t *M);
+void mtx_matrix_print(const mtx_matrix_t *M);
 
 // Escreve a matriz M em stream.
 void mtx_matrix_fprintf(FILE *stream, const mtx_matrix_t *M);
