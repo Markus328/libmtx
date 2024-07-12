@@ -9,7 +9,7 @@
     };
   in {
     devShells.x86_64-linux.default = pkgs.mkShell {
-      buildInputs = with pkgs; [gsl];
+      buildInputs = with pkgs; [gsl cpputest];
       packages = with pkgs; [gdb];
     };
   };
