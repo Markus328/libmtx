@@ -1,6 +1,8 @@
+#include "errors.h"
 #include "gsl/gsl_matrix_double.h"
 #include "gsl/gsl_permutation.h"
 #include "gsl/gsl_vector_double.h"
+#include "linalg.h"
 #include "matrix.h"
 #include "tests/rnd.h"
 #include "tests/workers.h"
@@ -12,7 +14,6 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "linalg.h"
 
 void print_gsl_matrix(gsl_matrix *gsl) {
   printf("matrix (%lu, %lu):\n", gsl->size1, gsl->size2);
@@ -49,10 +50,10 @@ static double get_rnd_dbl(int min_exp, int max_exp, struct rnd_buffer *rnd) {
 
 // Variante de random_matrix para usar em testes pesados multithreading.
 void t_random_matrix(mtx_matrix_t *_M, int dy, int dx, struct rnd_buffer *rnd) {
-  rnd_prepare_chars(rnd, dy * dx);
 
-  dy = dy > 0 ? dy : rnd_next_uchar(rnd) % 25;
-  dx = dx > 0 ? dx : rnd_next_uchar(rnd) % 25;
+  dy = dy > 0 ? dy : rnd_get_uchar(rnd) % 25;
+  dx = dx > 0 ? dx : rnd_get_uchar(rnd) % 25;
+  rnd_prepare_dbls(rnd, dy * dx);
   if (_M->data == NULL) {
     mtx_matrix_init(_M, dy, dx);
   } else if (_M->dy != dy || _M->dx != dx) {
@@ -70,10 +71,11 @@ void t_random_matrix(mtx_matrix_t *_M, int dy, int dx, struct rnd_buffer *rnd) {
 // Máximo the threads a usar.
 #define WORKERS 8
 
-int mtx_solution_check(mtx_matrix_t *_B, const mtx_matrix_t *A, const mtx_matrix_t *B,
-                       const mtx_matrix_t *X) {
+int mtx_solution_check(mtx_matrix_t *_B, const mtx_matrix_t *A,
+                       const mtx_matrix_t *B, const mtx_matrix_t *X) {
   mtx_matrix_mul(_B, A, X);
   if (mtx_matrix_distance(_B, B) > 1e-6) {
+    WORKER_START_PRINT;
     printf("Solution error: ");
     mtx_matrix_print(A);
     printf("X\n");
@@ -82,6 +84,7 @@ int mtx_solution_check(mtx_matrix_t *_B, const mtx_matrix_t *A, const mtx_matrix
     mtx_matrix_print(_B);
     printf("Which is different of \n");
     mtx_matrix_print(B);
+    WORKER_END_PRINT;
     return 1;
   }
 
@@ -123,7 +126,7 @@ worker_data worker_solve_augmented(worker_data *args) {
         mtx_linalg_LU_AB_solve(&x, &lu) != 0) {
       zeros++;
       WORKER_START_PRINT;
-      printf("no solution for matrix(%d, %d):\n", dy, dx);
+      printf("no solution for ");
       mtx_matrix_print(&m);
       WORKER_END_PRINT;
 
@@ -174,7 +177,8 @@ worker_data test_decomposition(worker_data *args) {
     double dt = 0;
     for (int ui = 0; ui < lu.dy; ++ui) {
       for (int uj = ui; uj < lu.dx; ++uj) {
-        dt += _mod(mtx_matrix_at(&re_decomp, ui, uj) - mtx_matrix_at(&lu, ui, uj));
+        dt += _mod(mtx_matrix_at(&re_decomp, ui, uj) -
+                   mtx_matrix_at(&lu, ui, uj));
       }
     }
     if (dt > 0) {
@@ -249,7 +253,7 @@ static int test_refine_mtx(const mtx_matrix_t *M, double *distance) {
     abort();
   }
 
-  mtx_matrix_view_t A = mtx_matrix_view_of(M, 0, 0, M->dy, M->dx - 1);
+  mtx_matrix_view_t A = mtx_matrix_view_of(M, 128, 0, M->dy, M->dx - 1);
   mtx_matrix_view_t B = mtx_matrix_column_of(M, M->dx - 1);
   mtx_matrix_view_t A_LU = mtx_matrix_view_of(&lu, 0, 0, M->dy, M->dx - 1);
   mtx_matrix_view_t X = mtx_matrix_column_of(&lu, M->dx - 1);
@@ -265,8 +269,8 @@ static int test_refine_mtx(const mtx_matrix_t *M, double *distance) {
     printf("X = ");
     mtx_matrix_print(&X.matrix);
 
-    double dn = mtx_linalg_LU_refine(&work, &new_X, &perm, &A_LU.matrix, &A.matrix,
-                                 &B.matrix);
+    double dn = mtx_linalg_LU_refine(&work, &new_X, &perm, &A_LU.matrix,
+                                     &A.matrix, &B.matrix);
     if (dt == dn && mtx_matrix_equals(&X.matrix, &new_X)) {
       break;
     }
@@ -307,9 +311,18 @@ static int test_refine_gsl(gsl_matrix *gm) {
   return 0;
 }
 
+void test_fail(const char *file, const char *fun, int line, mtx_error_t error,
+               ...) {
+  fprintf(stderr, "worker %ld failed in %s on %s at line %d\n", pthread_self(),
+          file, fun, line);
+  pthread_exit(NULL);
+}
+
 int main(void) {
 
   // mtx_matrix_random_compose();
+
+  mtx_cfg_set_error_handler(test_fail);
   mtx_matrix_t m;
   mtx_matrix_init(&m, 5, 6);
 

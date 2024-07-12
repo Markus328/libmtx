@@ -23,7 +23,9 @@ void mtx_matrix_init(mtx_matrix_t *_M, int dy, int dx) {
 }
 
 void mtx_matrix_free(mtx_matrix_t *M) {
-  assert(!MTX_MATRIX_IS_VIEW(M));
+  if (MTX_MATRIX_IS_VIEW(M)) {
+    MTX_INVALID_ERR(M);
+  }
   if (M == NULL || M->data == NULL) {
     return;
   }

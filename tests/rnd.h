@@ -17,7 +17,7 @@ struct rnd_buffer {
 #define RND_MAX_MEM 1024 * 1024 // 1M
 
 #define RND_FILL_BUF(rnd, rnd_type)                                            \
-  if (getrandom((rnd)->rnds, sizeof(rnd_type) * (rnd)->count, 0) < 0) {        \
+  if (getrandom((rnd)->rnds, (rnd)->count, 0) < 0) {                           \
     fprintf(stderr, "Error in getrandom().\n");                                \
   }                                                                            \
   (rnd)->c = 0
@@ -29,11 +29,10 @@ struct rnd_buffer {
     struct rnd_buffer *buf =                                                    \
         (struct rnd_buffer *)malloc(sizeof(struct rnd_buffer));                 \
                                                                                 \
-    count = count * sizeof(rnd_type) > RND_MAX_MEM                              \
-                ? RND_MAX_MEM / sizeof(rnd_type)                                \
-                : count;                                                        \
-    buf->rnds = (unsigned char *)malloc(sizeof(rnd_type) * count);              \
+    count = count * sizeof(rnd_type) > RND_MAX_MEM ? RND_MAX_MEM                \
+                                                   : count * sizeof(rnd_type);  \
     buf->count = count;                                                         \
+    buf->rnds = (unsigned char *)malloc(buf->count);                            \
                                                                                 \
     RND_FILL_BUF(buf, rnd_type);                                                \
     return buf;                                                                 \
@@ -43,17 +42,21 @@ struct rnd_buffer {
    */                                                                           \
   /* necessário. */                                                            \
   rnd_type rnd_get_##fun_name(struct rnd_buffer *rnd) {                         \
-    if (rnd->c == rnd->count) {                                                 \
+    if (rnd->c + sizeof(rnd_type) >= rnd->count) {                              \
       RND_FILL_BUF(rnd, rnd_type);                                              \
     }                                                                           \
-    return ((rnd_type *)rnd->rnds)[rnd->c++];                                   \
+    int c = rnd->c;                                                             \
+    rnd->c += sizeof(rnd_type);                                                 \
+    return *((rnd_type *)(rnd->rnds + c));                                      \
   }                                                                             \
                                                                                 \
   /* Retorna o próximo char aleatório do buffer quando se tem certeza que ele \
    */                                                                           \
   /* existe. */                                                                 \
   rnd_type rnd_next_##fun_name(struct rnd_buffer *rnd) {                        \
-    return ((rnd_type *)rnd->rnds)[rnd->c++];                                   \
+    int c = rnd->c;                                                             \
+    rnd->c += sizeof(rnd_type);                                                 \
+    return *((rnd_type *)(rnd->rnds + c));                                      \
   }                                                                             \
                                                                                 \
   /* Checa se existem n chars restantes no buffer e atualiza o buffer caso não \
@@ -61,7 +64,7 @@ struct rnd_buffer {
   /* exista. */                                                                 \
   void rnd_prepare_##fun_name##s(struct rnd_buffer *rnd, size_t n) {            \
     assert(n <= rnd->count);                                                    \
-    if (rnd->c + n >= rnd->count) {                                             \
+    if (rnd->c + n * sizeof(rnd_type) >= rnd->count) {                          \
       RND_FILL_BUF(rnd, rnd_type);                                              \
     }                                                                           \
   }
