@@ -273,11 +273,10 @@ int mtx_linalg_permutate(mtx_matrix_t *_M, const mtx_matrix_t *M,
     MTX_DIMEN_ERR(_M);
   }
 
-  CREATE_OUTPUT_ALIAS(permutated, _M);
+  MTX_MAKE_OUTPUT_ALIAS(permutated, _M);
 
-  GET_SAFE_OUTPUT_RULES(permutated, _M,
-                        MTX_MATRIX_OVERLAP(_M, M) ||
-                            MTX_MATRIX_OVERLAP(_M, M_PERM));
+  MTX_ENSURE_SAFE_OUTPUT(permutated, _M, M);
+  MTX_ENSURE_SAFE_OUTPUT(permutated, _M, M_PERM);
 
   int pivot;
   int lower_pivot = 0;
@@ -295,11 +294,11 @@ int mtx_linalg_permutate(mtx_matrix_t *_M, const mtx_matrix_t *M,
                   permutated.dx);
   }
 
-  COMMIT_OUTPUT(permutated, _M);
+  MTX_COMMIT_OUTPUT(permutated, _M);
   return 0;
 }
-int mtx_linalg_back_subs(mtx_matrix_t *_X, const mtx_matrix_t *U, const mtx_matrix_t *B,
-                     int jordan) {
+int mtx_linalg_back_subs(mtx_matrix_t *_X, const mtx_matrix_t *U,
+                         const mtx_matrix_t *B, int jordan) {
   MTX_ENSURE_INIT(U);
   MTX_ENSURE_INIT(B);
   if (!MTX_MATRIX_IS_SQUARE(U) || U->dy != B->dy) {
@@ -321,11 +320,12 @@ int mtx_linalg_back_subs(mtx_matrix_t *_X, const mtx_matrix_t *U, const mtx_matr
     MTX_DIMEN_ERR(_X);
   }
 
-  CREATE_OUTPUT_ALIAS(x, _X);
+  MTX_MAKE_OUTPUT_ALIAS(x, _X);
 
-  GET_SAFE_OUTPUT_RULES(x, _X,
-                        (MTX_MATRIX_OVERLAP(_X, B) && (_X->offY < B->offY)) ||
-                            (MTX_MATRIX_OVERLAP(_X, U) && (_X->offY <= U->offY)));
+  MTX_ENSURE_SAFE_OUTPUT_RULES(
+      x, _X, B, (MTX_MATRIX_OVERLAP(_X, B) && (_X->offY < B->offY)));
+  MTX_ENSURE_SAFE_OUTPUT_RULES(
+      x, _X, U, (MTX_MATRIX_OVERLAP(_X, U) && (_X->offY <= U->offY)));
 
   double *U_i;
   double *X_i;
@@ -344,7 +344,7 @@ int mtx_linalg_back_subs(mtx_matrix_t *_X, const mtx_matrix_t *U, const mtx_matr
     }
   }
 
-  COMMIT_OUTPUT(x, _X);
+  MTX_COMMIT_OUTPUT(x, _X);
 
   return 0;
 }
@@ -356,8 +356,8 @@ int mtx_linalg_back_subs(mtx_matrix_t *_X, const mtx_matrix_t *U, const mtx_matr
 // jordan = 1 para ignorar a diagnonal, obtendo o mesmo resultado.
 //
 // O resultado (x) é retornada na matriz X.
-int mtx_linalg_forward_subs(mtx_matrix_t *_X, const mtx_matrix_t *L, const mtx_matrix_t *B,
-                        int jordan) {
+int mtx_linalg_forward_subs(mtx_matrix_t *_X, const mtx_matrix_t *L,
+                            const mtx_matrix_t *B, int jordan) {
 
   MTX_ENSURE_INIT(L);
   MTX_ENSURE_INIT(B);
@@ -379,11 +379,13 @@ int mtx_linalg_forward_subs(mtx_matrix_t *_X, const mtx_matrix_t *L, const mtx_m
     return 1;
   }
 
-  CREATE_OUTPUT_ALIAS(x, _X);
+  MTX_MAKE_OUTPUT_ALIAS(x, _X);
 
-  GET_SAFE_OUTPUT_RULES(x, _X,
-                        (MTX_MATRIX_OVERLAP(_X, B) && (_X->offY > B->offY)) ||
-                            (MTX_MATRIX_OVERLAP(_X, L) && (_X->offY >= L->offY)));
+  MTX_ENSURE_SAFE_OUTPUT_RULES(
+      x, _X, B, (MTX_MATRIX_OVERLAP(_X, B) && (_X->offY > B->offY)));
+
+  MTX_ENSURE_SAFE_OUTPUT_RULES(
+      x, _X, L, (MTX_MATRIX_OVERLAP(_X, L) && (_X->offY >= L->offY)));
 
   double *L_i;
   double *X_i;
@@ -413,7 +415,7 @@ int mtx_linalg_forward_subs(mtx_matrix_t *_X, const mtx_matrix_t *L, const mtx_m
     }
   }
 
-  COMMIT_OUTPUT(x, _X);
+  MTX_COMMIT_OUTPUT(x, _X);
 
   return 0;
 }

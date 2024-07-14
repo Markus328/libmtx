@@ -1,3 +1,4 @@
+#include "atomic_operations.h"
 #include "errors.h"
 #include "gsl/gsl_matrix_double.h"
 #include "gsl/gsl_permutation.h"
@@ -42,7 +43,7 @@ static double get_rnd_dbl(int min_exp, int max_exp, struct rnd_buffer *rnd) {
   int xp;
   double _d = frexp(d, &xp);
   if (xp < min_exp || xp > max_exp) {
-    d = 0;
+    d = _d;
   }
 
   return d;
@@ -253,7 +254,7 @@ static int test_refine_mtx(const mtx_matrix_t *M, double *distance) {
     abort();
   }
 
-  mtx_matrix_view_t A = mtx_matrix_view_of(M, 128, 0, M->dy, M->dx - 1);
+  mtx_matrix_view_t A = mtx_matrix_view_of(M, 0, 0, M->dy, M->dx - 1);
   mtx_matrix_view_t B = mtx_matrix_column_of(M, M->dx - 1);
   mtx_matrix_view_t A_LU = mtx_matrix_view_of(&lu, 0, 0, M->dy, M->dx - 1);
   mtx_matrix_view_t X = mtx_matrix_column_of(&lu, M->dx - 1);
@@ -320,30 +321,6 @@ void test_fail(const char *file, const char *fun, int line, mtx_error_t error,
 
 int main(void) {
 
-  // mtx_matrix_random_compose();
-
   mtx_cfg_set_error_handler(test_fail);
-  mtx_matrix_t m;
-  mtx_matrix_init(&m, 5, 6);
-
-  FILE *fd = fopen("./test-refine.txt", "r");
-  if (fd == NULL) {
-    struct rnd_buffer *buf = rnd_alloc_dbls(5 * 6);
-    t_random_matrix(&m, 5, 6, buf);
-    rnd_free(buf);
-  } else {
-    mtx_matrix_fread(fd, &m);
-    fclose(fd);
-  }
-  printf("just read ");
-  mtx_matrix_print(&m);
-  gsl_matrix *gm = gsl_matrix_alloc(5, 6);
-  copy_to_gsl_matrix(gm, &m);
-
-  double dt_mtx = 0;
-  test_refine_mtx(&m, &dt_mtx);
-  test_refine_gsl(gm);
-
-  mtx_matrix_free(&m);
-  gsl_matrix_free(gm);
+  mtx_matrix_random_compose();
 }

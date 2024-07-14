@@ -3,6 +3,9 @@
 
 #include "matrix.h"
 
+// Decomposição LU, use as macros mtx_linalg_LU_decomp para decompsição geral e
+// mtx_linalg_LU_decomp_perf para decomposição mais rápida na resolução de
+// sistemas lineares.
 int mtx_linalg_LU_decomposition(mtx_matrix_perm_t *__M_PERM,
                                 mtx_matrix_t *_M_LU, const mtx_matrix_t *M,
                                 int perfect);
@@ -13,10 +16,11 @@ int mtx_linalg_LU_decomposition(mtx_matrix_perm_t *__M_PERM,
 #define mtx_linalg_LU_decomp(__M_PERM, _M, M)                                  \
   mtx_linalg_LU_decomposition((__M_PERM), (_M), (M), 0)
 
-// Exatamente como mtx_linalg_echelon() porém otimizada para determinantes (se
-// falhar, a submatriz mxm de uma matriz mxn tem determinante zero). Na prática,
-// falha ao encontrar linhas zeradas e sempre falhará se n < m. Retorna o signum
-// 0 ou 1 se sucesso e -1 caso haja falha.
+// Exatamente como mtx_linalg_LU_decomp() porém mais rápida caso seja resolução
+// de sistemas lineares (se falhar, a submatriz mxm de uma matriz mxn tem
+// determinante zero). Na prática, falha ao encontrar linhas zeradas e sempre
+// falhará se n < m. Retorna o signum >= se sucesso e negativo caso haja
+// falha.
 #define mtx_linalg_LU_decomp_perf(__M_PERM, _M, M)                             \
   mtx_linalg_LU_decomposition((__M_PERM), (_M), (M), 1)
 
@@ -78,7 +82,6 @@ int mtx_linalg_LU_solve(mtx_matrix_t *_X, const mtx_matrix_perm_t *M_PERM,
 // cálculos intermediários, X a solução atual, M_PERM e A_LU como sendo a matriz
 // de permutação e A decomposto e por fim a matriz A e B originais. No fim da
 // execução, X será substituído por uma versão mais próxima da solução exata.
-//
 //
 // Dado que a resolução de um sistema linear que gerou resíduos: Ax' = B + B', a
 // função retorna a distancia entre B e B', indicando o grau de distancia que a

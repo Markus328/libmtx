@@ -2,6 +2,17 @@
 #include "atomic_operations.h"
 #include "errors.h"
 
+int __mtx_cfg_fix_unsafe_overlappings = 1;
+
+void mtx_cfg_fix_unsafe_overlappings(int enable) {
+  // TODO: Make Thread safe
+  __mtx_cfg_fix_unsafe_overlappings = enable;
+}
+
+int mtx_cfg_are_unsafe_overlappings_fixed() {
+  return __mtx_cfg_fix_unsafe_overlappings;
+}
+
 void mtx_matrix_init(mtx_matrix_t *_M, int dy, int dx) {
   assert(dy <= MTX_MATRIX_MAX_ROWS && dx <= MTX_MATRIX_MAX_COLUMNS);
   assert(dy > 0 && dx > 0);
@@ -22,24 +33,25 @@ void mtx_matrix_init(mtx_matrix_t *_M, int dy, int dx) {
   }
 }
 
-void mtx_matrix_free(mtx_matrix_t *M) {
-  if (MTX_MATRIX_IS_VIEW(M)) {
-    MTX_INVALID_ERR(M);
-  }
-  if (M == NULL || M->data == NULL) {
+void mtx_matrix_free(mtx_matrix_t *__M) {
+  if (__M == NULL || __M->data == NULL) {
     return;
   }
 
-  for (int i = 0; i < M->dy; ++i) {
-    free(M->data->m[i]);
-    M->data->m[i] = NULL;
+  if (MTX_MATRIX_IS_VIEW(__M)) {
+    MTX_INVALID_ERR(__M);
   }
 
-  free(M->data->m);
+  for (int i = 0; i < __M->dy; ++i) {
+    free(__M->data->m[i]);
+    __M->data->m[i] = NULL;
+  }
 
-  M->data->m = NULL;
-  free(M->data);
-  M->data = NULL;
+  free(__M->data->m);
+
+  __M->data->m = NULL;
+  free(__M->data);
+  __M->data = NULL;
 }
 
 void mtx_matrix_set_identity(mtx_matrix_t *_M) {
@@ -187,15 +199,13 @@ int mtx_matrix_mul(mtx_matrix_t *_C, const mtx_matrix_t *A,
     }
   }
 
-  CREATE_OUTPUT_ALIAS(mul_res, _C);
+  MTX_MAKE_OUTPUT_ALIAS(mul_res, _C);
 
-  GET_SAFE_OUTPUT_RULES(mul_res, _C,
-                        MTX_MATRIX_OVERLAP(_C, A) || MTX_MATRIX_OVERLAP(_C, B));
+  MTX_ENSURE_SAFE_OUTPUT(mul_res, _C, A);
+  MTX_ENSURE_SAFE_OUTPUT(mul_res, _C, B);
 
   int bx = 0, ay = 0;
 
-  // Garantir que A e B não sejam modificados durante os cálculos, ou
-  // undefined behavior
   for (; ay < A->dy; ++ay) {
     bx = 0;
     for (; bx < B->dx; ++bx) {
@@ -209,7 +219,7 @@ int mtx_matrix_mul(mtx_matrix_t *_C, const mtx_matrix_t *A,
     }
   }
 
-  COMMIT_OUTPUT(mul_res, _C);
+  MTX_COMMIT_OUTPUT(mul_res, _C);
   return 0;
 }
 
@@ -222,9 +232,9 @@ int mtx_matrix_s_mul(mtx_matrix_t *_M, const mtx_matrix_t *M, double scalar) {
     MTX_DIMEN_ERR(_M);
   }
 
-  CREATE_OUTPUT_ALIAS(m_res, _M);
+  MTX_MAKE_OUTPUT_ALIAS(m_res, _M);
 
-  GET_SAFE_OUTPUT_RULES(m_res, _M, MTX_MATRIX_OVERLAP_AFTER(M, _M));
+  MTX_ENSURE_SAFE_OUTPUT_RULES(m_res, _M, M, MTX_MATRIX_OVERLAP_AFTER(M, _M));
   for (int i = 0; i < _M->dy; ++i) {
     for (int j = 0; j < _M->dx; ++j) {
       mtx_matrix_at(_M, i, j) = mtx_matrix_at(M, i, j) * scalar;
@@ -323,10 +333,9 @@ double mtx_matrix_distance_each(mtx_matrix_t *_M_D, const mtx_matrix_t *A,
     return -1;
   }
 
-  CREATE_OUTPUT_ALIAS(m_d, _M_D);
-  GET_SAFE_OUTPUT_RULES(m_d, _M_D,
-                        MTX_MATRIX_OVERLAP_AFTER(A, _M_D) ||
-                            MTX_MATRIX_OVERLAP_AFTER(B, _M_D));
+  MTX_MAKE_OUTPUT_ALIAS(m_d, _M_D);
+  MTX_ENSURE_SAFE_OUTPUT_RULES(m_d, _M_D, A, MTX_MATRIX_OVERLAP_AFTER(A, _M_D));
+  MTX_ENSURE_SAFE_OUTPUT_RULES(m_d, _M_D, B, MTX_MATRIX_OVERLAP_AFTER(B, _M_D));
 
   double dt = 0;
 
@@ -339,7 +348,7 @@ double mtx_matrix_distance_each(mtx_matrix_t *_M_D, const mtx_matrix_t *A,
     }
   }
 
-  COMMIT_OUTPUT(m_d, _M_D);
+  MTX_COMMIT_OUTPUT(m_d, _M_D);
 
   return dt;
 }
@@ -358,6 +367,9 @@ double mtx_matrix_distance_each(mtx_matrix_t *_M_D, const mtx_matrix_t *A,
     } else if (!MTX_MATRIX_SAME_DIMENSIONS(_C, A)) {                           \
       MTX_DIMEN_ERR(_C);                                                       \
     }                                                                          \
+    MTX_MAKE_OUTPUT_ALIAS(c, _C);                                              \
+    MTX_ENSURE_SAFE_OUTPUT_RULES(c, _C, A, MTX_MATRIX_OVERLAP_AFTER(A, _C));   \
+    MTX_ENSURE_SAFE_OUTPUT_RULES(c, _C, B, MTX_MATRIX_OVERLAP_AFTER(B, _C));   \
                                                                                \
     for (int i = 0; i < A->dy; ++i) {                                          \
       for (int j = 0; j < A->dx; ++j) {                                        \
