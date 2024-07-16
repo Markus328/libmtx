@@ -13,11 +13,30 @@ int mtx_cfg_are_unsafe_overlappings_fixed() {
   return __mtx_cfg_fix_unsafe_overlappings;
 }
 
+mtx_mem_allocator_t __mtx_cfg_mem_allocator = mtx_default_mem_alloc;
+
+void *mtx_default_mem_alloc(size_t size) {
+  void *p = NULL;
+
+  if (size > 0) {
+    p = malloc(size);
+  }
+  if (p == NULL) {
+    MTX_SYSTEM_ERR("malloc");
+  }
+
+  return p;
+}
+
+void mtx_cfg_set_mem_alloc(mtx_mem_allocator_t allocator) {
+  __mtx_cfg_mem_allocator = allocator; // TODO: Make Thread safe.
+}
+
 void mtx_matrix_init(mtx_matrix_t *_M, int dy, int dx) {
   assert(dy <= MTX_MATRIX_MAX_ROWS && dx <= MTX_MATRIX_MAX_COLUMNS);
   assert(dy > 0 && dx > 0);
 
-  _M->data = (mtx_matrix_data_t *)malloc(sizeof(mtx_matrix_data_t));
+  _M->data = (mtx_matrix_data_t *)mtx_mem_alloc(sizeof(mtx_matrix_data_t));
   _M->data->size1 = dy;
   _M->data->size2 = dx;
 
@@ -27,9 +46,9 @@ void mtx_matrix_init(mtx_matrix_t *_M, int dy, int dx) {
   _M->offY = 0;
   _M->offX = 0;
 
-  _M->data->m = (double **)malloc(sizeof(double *) * dy);
+  _M->data->m = (double **)mtx_mem_alloc(sizeof(double *) * dy);
   for (int i = 0; i < dy; ++i) {
-    _M->data->m[i] = (double *)malloc(sizeof(double) * dx);
+    _M->data->m[i] = (double *)mtx_mem_alloc(sizeof(double) * dx);
   }
 }
 

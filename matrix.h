@@ -71,6 +71,18 @@ typedef mtx_matrix_t mtx_matrix_perm_t;
 //   }
 // }
 
+typedef void *(*mtx_mem_allocator_t)(size_t size);
+
+extern mtx_mem_allocator_t __mtx_cfg_mem_allocator;
+
+// Função padrão para alocação de memória.
+void *mtx_default_mem_alloc(size_t size);
+
+// Seta a função alocadora de memória.
+void mtx_cfg_set_mem_alloc(mtx_mem_allocator_t allocator);
+
+#define mtx_mem_alloc(size) __mtx_cfg_mem_allocator(size)
+
 // Inicializa a matriz _M com dy linhas e dx colunas.
 void mtx_matrix_init(mtx_matrix_t *_M, int dy, int dx);
 
