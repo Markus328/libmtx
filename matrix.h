@@ -1,12 +1,11 @@
 #ifndef MTX_MATRIX_H
 #define MTX_MATRIX_H
 
-#include <assert.h>
-#include <float.h>
-#include <math.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 typedef struct mtx_matrix_data {
   double **m;
@@ -182,4 +181,7 @@ double mtx_matrix_distance(const mtx_matrix_t *A, const mtx_matrix_t *B);
 double mtx_matrix_distance_each(mtx_matrix_t *_M_D, const mtx_matrix_t *A,
                                 const mtx_matrix_t *B);
 
+#ifdef __cplusplus
+}
+#endif
 #endif

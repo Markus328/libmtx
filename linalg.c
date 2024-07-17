@@ -2,6 +2,9 @@
 #include "atomic_operations.h"
 #include "errors.h"
 #include "matrix.h"
+#include <assert.h>
+#include <stdlib.h>
+#include <string.h>
 
 static int _mtx_row_pivot(double *row, int start, int end) {
   int r = -1;

@@ -3,6 +3,10 @@
 
 #include "matrix.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Decomposição LU, use as macros mtx_linalg_LU_decomp para decompsição geral e
 // mtx_linalg_LU_decomp_perf para decomposição mais rápida na resolução de
 // sistemas lineares.
@@ -91,4 +95,7 @@ double mtx_linalg_LU_refine(mtx_matrix_t *_M_WORK, mtx_matrix_t *X,
                             const mtx_matrix_t *A_LU, const mtx_matrix_t *A,
                             const mtx_matrix_t *B);
 
+#ifdef __cplusplus
+}
+#endif
 #endif

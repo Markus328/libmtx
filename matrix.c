@@ -1,6 +1,9 @@
 #include "matrix.h"
 #include "atomic_operations.h"
 #include "errors.h"
+#include <assert.h>
+#include <stdlib.h>
+#include <string.h>
 
 int __mtx_cfg_fix_unsafe_overlappings = 1;
 
@@ -123,15 +126,17 @@ int mtx_matrix_copy(mtx_matrix_t *M_TO, const mtx_matrix_t *M_FROM) {
   MTX_ENSURE_INIT(M_FROM);
   MTX_ENSURE_INIT(M_TO);
 
-  if (MTX_MATRIX_OVERLAP_AFTER(M_FROM, M_TO)) {
-    MTX_OVERLAP_ERR(M_FROM, M_TO);
-  }
   if (!MTX_MATRIX_SAME_DIMENSIONS(M_TO, M_FROM)) {
     MTX_DIMEN_ERR(M_TO);
   }
+
+  void *(*copy)(void *, const void *, size_t) = memcpy;
+  if (MTX_MATRIX_OVERLAP_AFTER(M_FROM, M_TO)) {
+    copy = memmove;
+  }
   for (int i = 0; i < M_TO->dy; ++i) {
-    memcpy(mtx_matrix_row(M_TO, i), mtx_matrix_row(M_FROM, i),
-           sizeof(double) * M_TO->dx);
+    copy(mtx_matrix_row(M_TO, i), mtx_matrix_row(M_FROM, i),
+         sizeof(double) * M_TO->dx);
   }
   return 0;
 }

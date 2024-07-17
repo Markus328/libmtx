@@ -1,6 +1,10 @@
 #ifndef MTX_ERRORS_H
 #define MTX_ERRORS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum error_codes {
   MTX_SUCCESS = 0,
   MTX_NULL_ERR,
@@ -59,5 +63,9 @@ void mtx_default_error_handler(const char *file, const char *fun, int line,
   if ((M)->data == NULL) {                                                     \
     MTX_NULL_ERR(M);                                                           \
   }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

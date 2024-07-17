@@ -4,6 +4,10 @@
 #include "errors.h"
 #include "matrix.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Defined in matrix.c
 extern int __mtx_cfg_fix_unsafe_overlappings;
 // Defined in matrix.c
@@ -55,5 +59,9 @@ void mtx_cfg_fix_unsafe_overlappings(int enable);
       mtx_matrix_free(&alias);                                                 \
     }                                                                          \
   } while (0)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
