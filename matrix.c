@@ -5,6 +5,20 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define FSCANF_ONE(stream, fmt, pointer)                                       \
+  do {                                                                         \
+    if (fscanf(stream, fmt, pointer) != 1) {                                   \
+      MTX_SYSTEM_ERR("fscanf");                                                \
+    }                                                                          \
+  } while (0)
+
+#define FPRINTF_ONE(stream, fmt, data)                                         \
+  do {                                                                         \
+    if (fprintf(stream, fmt, data) < 0) {                                      \
+      MTX_SYSTEM_ERR("fprintf");                                               \
+    }                                                                          \
+  } while (0)
+
 int __mtx_cfg_fix_unsafe_overlappings = 1;
 
 void mtx_cfg_fix_unsafe_overlappings(int enable) {
@@ -35,10 +49,9 @@ void mtx_cfg_set_mem_alloc(mtx_mem_allocator_t allocator) {
   __mtx_cfg_mem_allocator = allocator; // TODO: Make Thread safe.
 }
 
-void mtx_matrix_init(mtx_matrix_t *_M, int dy, int dx) {
+static void __configure_matrix(mtx_matrix_t *_M, int dy, int dx) {
   assert(dy <= MTX_MATRIX_MAX_ROWS && dx <= MTX_MATRIX_MAX_COLUMNS);
   assert(dy > 0 && dx > 0);
-
   _M->data = (mtx_matrix_data_t *)mtx_mem_alloc(sizeof(mtx_matrix_data_t));
   _M->data->size1 = dy;
   _M->data->size2 = dx;
@@ -50,9 +63,66 @@ void mtx_matrix_init(mtx_matrix_t *_M, int dy, int dx) {
   _M->offX = 0;
 
   _M->data->m = (double **)mtx_mem_alloc(sizeof(double *) * dy);
+}
+
+static inline void __reference_arr(mtx_matrix_t *_M, double *arr, int dy,
+                                   int dx) {
   for (int i = 0; i < dy; ++i) {
-    _M->data->m[i] = (double *)mtx_mem_alloc(sizeof(double) * dx);
+    _M->data->m[i] = &arr[i * dx];
   }
+}
+
+void mtx_matrix_init(mtx_matrix_t *_M, int dy, int dx) {
+  __configure_matrix(_M, dy, dx);
+
+  double *m = (double *)malloc(dy * dx * sizeof(double));
+  __reference_arr(_M, m, dy, dx);
+}
+
+void mtx_matrix_ref_a(mtx_matrix_t *_M, double *arr, int dy, int dx) {
+  __configure_matrix(_M, dy, dx);
+  __reference_arr(_M, arr, dy, dx);
+}
+
+double *mtx_matrix_raw_a(mtx_matrix_t *M) {
+  MTX_ENSURE_INIT(M);
+
+  double *head_mem = M->data->m[0]; // head mem is the pointer which can be
+                                    // freed.
+  for (int i = 0; i < M->dy; ++i) {
+    // rows swaps can be done, then the head mem might not be the first. Since
+    // its a contiguous array, the pointer which the lowest value is the head.
+    if (M->data->m[i] < head_mem) {
+      head_mem = M->data->m[i];
+    }
+  }
+
+  return head_mem;
+}
+
+void mtx_matrix_unref(mtx_matrix_t *__M) {
+
+  if (__M == NULL || __M->data == NULL) {
+    return;
+  }
+
+  free(__M->data->m);
+  __M->data->m = NULL;
+  free(__M->data);
+  __M->data = NULL;
+}
+
+void mtx_matrix_swap(mtx_matrix_t *M1, mtx_matrix_t *M2) {
+  MTX_ENSURE_INIT(M1);
+  MTX_ENSURE_INIT(M2);
+  if (!MTX_MATRIX_SAME_DIMENSIONS(M1, M2) || MTX_MATRIX_IS_VIEW(M1) ||
+      MTX_MATRIX_IS_VIEW(M2)) {
+    MTX_INVALID_ERR(M1);
+  }
+
+  double **tmp = M1->data->m;
+  M1->data->m = M2->data->m;
+  M2->data->m = tmp;
 }
 
 void mtx_matrix_free(mtx_matrix_t *__M) {
@@ -64,16 +134,12 @@ void mtx_matrix_free(mtx_matrix_t *__M) {
     MTX_INVALID_ERR(__M);
   }
 
-  for (int i = 0; i < __M->dy; ++i) {
-    free(__M->data->m[i]);
-    __M->data->m[i] = NULL;
-  }
+  double *head_mem = mtx_matrix_raw_a(__M);
+  // This only works because all rows are a single CONTIGUOUS and splited
+  // array starting at head_mem.
+  free(head_mem);
 
-  free(__M->data->m);
-
-  __M->data->m = NULL;
-  free(__M->data);
-  __M->data = NULL;
+  mtx_matrix_unref(__M);
 }
 
 void mtx_matrix_set_identity(mtx_matrix_t *_M) {
@@ -160,10 +226,6 @@ mtx_matrix_view_t mtx_matrix_view_of(const mtx_matrix_t *M_OF, int init_i,
   return (mtx_matrix_view_t){.matrix = mtx};
 }
 
-#define mtx_matrix_column_of(M_OF, j)                                          \
-  mtx_matrix_view_of(M_OF, 0, j, (M_OF)->dy, 1)
-#define mtx_matrix_row_of(M_OF, i) mtx_matrix_view_of(M_OF, i, 0, 1, (M_OF)->dx)
-
 int mtx_matrix_copy_from(mtx_matrix_t *M_TO, const mtx_matrix_t *M_FROM,
                          int init_i, int init_j) {
   MTX_ENSURE_INIT(M_FROM);
@@ -184,24 +246,87 @@ int mtx_matrix_copy_from(mtx_matrix_t *M_TO, const mtx_matrix_t *M_FROM,
 void mtx_matrix_print(const mtx_matrix_t *M) {
 
   printf("matrix (%u, %u):\n", M->dy, M->dx);
-  mtx_matrix_fprintf(stdout, M);
+  mtx_matrix_fprint(stdout, M);
 }
-void mtx_matrix_fprintf(FILE *stream, const mtx_matrix_t *M) {
+void mtx_matrix_fprint(FILE *stream, const mtx_matrix_t *M) {
 
+  if (stream == NULL) {
+    MTX_SYSTEM_ERR("fprintf");
+  }
   for (int i = 0; i < M->dy; ++i) {
     for (int j = 0; j < M->dx; ++j) {
-      fprintf(stream, "%g ", mtx_matrix_at(M, i, j));
+      FPRINTF_ONE(stream, "%g ", mtx_matrix_at(M, i, j));
     }
     fprintf(stream, "\n");
   }
 }
 
 void mtx_matrix_fread(FILE *stream, mtx_matrix_t *M) {
+  if (stream == NULL) {
+    MTX_SYSTEM_ERR("fscanf");
+  }
   for (int i = 0; i < M->dy; ++i) {
     for (int j = 0; j < M->dx; ++j) {
-      fscanf(stream, "%lf", &mtx_matrix_at(M, i, j));
+      FSCANF_ONE(stream, "%lf", &mtx_matrix_at(M, i, j));
     }
   }
+}
+
+void mtx_matrix_finit(FILE *stream, mtx_matrix_t *_M) {
+  if (stream == NULL) {
+    MTX_SYSTEM_ERR("fscanf");
+  }
+
+  double *mtx_m = (double *)malloc(MTX_MATRIX_MAX_COLUMNS *
+                                   MTX_MATRIX_MAX_ROWS * sizeof(double));
+
+  int dx, dy;
+  int num_index = 0;
+
+  int c = ' ';
+
+#define READ_DBL                                                               \
+  if (c != ' ') {                                                              \
+    MTX_SYSTEM_ERR("fscanf");                                                  \
+  }                                                                            \
+  fscanf(stream, "%lf", &mtx_m[num_index++]);                                  \
+  c = fgetc(stream);
+
+  // Check if stream has at least one valid number then scan it, otherwise throw
+  // error.
+  FSCANF_ONE(stream, "%lf", &mtx_m[num_index++]);
+
+  // Read first only row 1
+  for (dx = 1; dx < MTX_MATRIX_MAX_COLUMNS && c != EOF && c != '\n'; ++dx) {
+    READ_DBL;
+  }
+  for (dy = 1; dy < MTX_MATRIX_MAX_ROWS && c != EOF; ++dy) {
+    c = ' ';
+
+    READ_DBL;
+    if (c == EOF || c == '\n') {
+      break;
+    }
+    int dxi = 1;
+    for (; dxi < MTX_MATRIX_MAX_COLUMNS && c != EOF && c != '\n'; ++dxi) {
+      READ_DBL;
+    }
+    if (dxi < dx) {
+      MTX_SYSTEM_ERR("fscanf");
+    } else if (dxi > dx) {
+      MTX_SYSTEM_ERR("fscanf");
+    }
+  }
+
+#undef READ_DBL
+
+  double *tmp_ptr = (double *)realloc(mtx_m, dy * dx * sizeof(double));
+  if (tmp_ptr == NULL) {
+    free(mtx_m);
+    MTX_SYSTEM_ERR("realloc");
+  }
+
+  mtx_matrix_ref_a(_M, mtx_m, dy, dx);
 }
 
 int mtx_matrix_mul(mtx_matrix_t *_C, const mtx_matrix_t *A,
@@ -305,9 +430,6 @@ int mtx_matrix_equals(const mtx_matrix_t *A, const mtx_matrix_t *B) {
   return 1;
 }
 
-// Calcula e retorna o grau de diferença entre as matrizes A e B. Retorna
-// sempre um número positivo, exceto na falha na qual o número retornado é
-// negativo.
 double mtx_matrix_distance(const mtx_matrix_t *A, const mtx_matrix_t *B) {
 
   MTX_ENSURE_INIT(A);
@@ -330,14 +452,6 @@ double mtx_matrix_distance(const mtx_matrix_t *A, const mtx_matrix_t *B) {
   return dt;
 }
 
-// Subtrai a matriz A da matriz B com o resultado em _M_D e retorna o
-// somátorio dos módulos de cada elemento de _M_D, que é sempre um número
-// positivo. O valor retornado é exatamente a distancia entre as duas
-// matrizes, sendo equivalente ao retornado por mtx_matrix_distance().
-//
-// Retorna zero se as matrizes forem idênticas e negativo caso ocorra erro. Em
-// ambos os casos, _M_DU pode não conter a subtração de A e B, portanto, deve
-// ser ignorado.
 double mtx_matrix_distance_each(mtx_matrix_t *_M_D, const mtx_matrix_t *A,
                                 const mtx_matrix_t *B) {
 

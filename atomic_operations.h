@@ -17,21 +17,21 @@ int mtx_cfg_are_unsafe_overlappings_fixed();
 void mtx_cfg_fix_unsafe_overlappings(int enable);
 
 // Cria um alias de uma matriz, copiando as bordas e referenciando os dados.
-#define MTX_MAKE_OUTPUT_ALIAS(name, output)                                    \
-  mtx_matrix_t name = *(output);                                               \
-  int __alias_is_still_same = 1;
+#define MTX_MAKE_OUTPUT_ALIAS(alias, output)                                   \
+  mtx_matrix_t alias = *(output);                                              \
+  int __##alias##_is_still_same = 1;
 
 // Caso rules == true, executa action() com argumentos na va_args. Recebe uma
 // mtx_matrix_t alias e uma mtx_matrix_t * output.
 #define MTX_ENSURE_SAFE_OUTPUT_IN_DETAILS(alias, output, input, rules, action, \
                                           ...)                                 \
   do {                                                                         \
-    if (__alias_is_still_same && rules) {                                      \
+    if (__##alias##_is_still_same && rules) {                                  \
       if (!mtx_cfg_are_unsafe_overlappings_fixed()) {                          \
         MTX_OVERLAP_ERR(output, input);                                        \
       }                                                                        \
       alias.data = NULL;                                                       \
-      __alias_is_still_same = 0;                                               \
+      __##alias##_is_still_same = 0;                                           \
       action(&(alias), __VA_ARGS__);                                           \
     }                                                                          \
   } while (0)
@@ -54,7 +54,7 @@ void mtx_cfg_fix_unsafe_overlappings(int enable);
 // CREATE_OUTPUT_ALIAS e MTX_ENSURE_SAFE_OUTPUT*.
 #define MTX_COMMIT_OUTPUT(alias, output)                                       \
   do {                                                                         \
-    if (!__alias_is_still_same) {                                              \
+    if (!__##alias##_is_still_same) {                                          \
       mtx_matrix_copy(output, &alias);                                         \
       mtx_matrix_free(&alias);                                                 \
     }                                                                          \

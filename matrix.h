@@ -61,15 +61,6 @@ typedef mtx_matrix_t mtx_matrix_perm_t;
    ((M2)->offY > (M1)->offY ||                                                 \
     ((M2)->offX > (M1)->offX && (M2)->offY == (M1)->offY)))
 
-// void matrix_init0(matrix_t *M, unsigned int dy, unsigned int dx) {
-//   _m_init_dy(M, dy);
-//   M->dx = dx;
-
-//   for (int i = 0; i < dy; ++i) {
-//     M->m[i] = (double *)calloc(dx, sizeof(double));
-//   }
-// }
-
 typedef void *(*mtx_mem_allocator_t)(size_t size);
 
 extern mtx_mem_allocator_t __mtx_cfg_mem_allocator;
@@ -85,10 +76,20 @@ void mtx_cfg_set_mem_alloc(mtx_mem_allocator_t allocator);
 // Inicializa a matriz _M com dy linhas e dx colunas.
 void mtx_matrix_init(mtx_matrix_t *_M, int dy, int dx);
 
+// Inicializa a matriz _M através de stream, auto-detectando as dimensões de
+// acoro com o conteúdo de stream.
+void mtx_matrix_finit(FILE *stream, mtx_matrix_t *_M);
+
 // Inicializa a matriz _M_PERM como uma matriz de permutação de dimensões dxd.
 void mtx_matrix_init_perm(mtx_matrix_perm_t *_M_PERM, int d);
 
-// Libera a memória alocada da matriz M.
+// Swapa os recursos de M1 e M2, se e somente se M1 e M2 tenham as mesmas
+// dimensões e não sejam views.
+void mtx_matrix_swap(mtx_matrix_t *M1, mtx_matrix_t *M2);
+
+// Libera a memória alocada da matriz M, tanto os metadados quanto os elementos.
+// Apenas é totalmente seguro usar essa função em uma matriz M gerada por
+// mtx_matrix_init(), mtx_matrix_init_perm() ou mtx_matrix_finit().
 void mtx_matrix_free(mtx_matrix_t *M);
 
 // Transformaa a matriz _M em matriz identidade. Caso _M->dy > _M->dx, apenas a
@@ -114,6 +115,19 @@ int mtx_matrix_copy(mtx_matrix_t *M_TO, const mtx_matrix_t *M_FROM);
 mtx_matrix_view_t mtx_matrix_view_of(const mtx_matrix_t *M_OF, int init_i,
                                      int init_j, int dy, int dx);
 
+// Cria uma matriz que se referencia a todos os elementos de um dado array, de
+// acordo com dy e dx. Caso 'arr' aponte para memória não alocada por
+// malloc(),calloc() ou realloc(), JAMAIS use mtx_matrix_free() na matriz _M,
+// use mtx_matrix_unref().
+void mtx_matrix_ref_a(mtx_matrix_t *_M, double *arr, int dy, int dx);
+
+// Retorna o ponteiro C do array dos elementos de uma matriz.
+double *mtx_matrix_raw_a(mtx_matrix_t *M);
+
+// Destroi a estrutura da matriz, liberando a memória dos metadados, mas sem
+// liberar a memória do array de elementos.
+void mtx_matrix_unref(mtx_matrix_t *__M);
+
 // Retorna uma view da coluna j de M_OF.
 #define mtx_matrix_column_of(M_OF, j)                                          \
   mtx_matrix_view_of(M_OF, 0, j, (M_OF)->dy, 1)
@@ -130,10 +144,16 @@ int mtx_matrix_copy_from(mtx_matrix_t *M_TO, const mtx_matrix_t *M_FROM,
 void mtx_matrix_print(const mtx_matrix_t *M);
 
 // Escreve a matriz M em stream.
-void mtx_matrix_fprintf(FILE *stream, const mtx_matrix_t *M);
+void mtx_matrix_fprint(FILE *stream, const mtx_matrix_t *M);
 
 // Lê a matriz M de stream.
 void mtx_matrix_fread(FILE *stream, mtx_matrix_t *M);
+
+// Lê uma matriz de stream, auto-detectando as dimensões e retornando o array
+// que representa os elementos lidos em ordem natural (de cima para baixo e
+// esquerda para direita). Provavelmente isso será usado em conjunto com
+// mtx_matrix_fill_a().
+double *mtx_matrix_fread_raw(FILE *stream, int *dy, int *dx);
 
 // Realiza a multiplicação AxB e salva o resultado em _C.
 int mtx_matrix_mul(mtx_matrix_t *_C, const mtx_matrix_t *A,
