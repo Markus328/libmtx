@@ -79,6 +79,51 @@ TEST_GROUP_C_TEARDOWN(matrix_basic) {
   mock_c()->clear();
 }
 
+MAKE_TEST(matrix_lifecycle, ref_a) {
+  double arr[6];
+
+  mtx_matrix_t m;
+
+  mock_c()->expectNCalls(2, "malloc_mock");
+  mtx_matrix_ref_a(&m, arr, 3, 2);
+
+  for (int i = 0; i < m.dy; ++i) {
+    CHECK_C(mtx_matrix_row(&m, i) == &arr[i * m.dx]);
+  }
+
+  mock_c()->disable();
+
+  mtx_matrix_unref(&m);
+}
+
+MAKE_TEST(matrix_lifecycle, unref) {
+  mock_c()->disable();
+  double arr[6];
+  mtx_matrix_t m;
+  mtx_matrix_ref_a(&m, arr, 3, 2);
+
+  mock_c()->enable();
+
+  mock_c()->expectNCalls(2, "free_mock");
+  mtx_matrix_unref(&m);
+}
+
+MAKE_TEST(matrix_lifecycle, raw_a) {
+  mock_c()->disable();
+  double arr[6];
+  mtx_matrix_t m;
+  mtx_matrix_ref_a(&m, arr, 3, 2);
+
+  // swaps row 1 and row 3
+  double *tmp = m.data->m[0];
+  m.data->m[0] = m.data->m[2];
+  m.data->m[2] = tmp;
+
+  CHECK_C(mtx_matrix_raw_a(&m) == arr);
+
+  mtx_matrix_unref(&m);
+}
+
 MAKE_TEST(matrix_basic, clone) {
 
   mock_c()->expectNCalls(M_DY, "memcpy_mock");

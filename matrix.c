@@ -292,8 +292,8 @@ void mtx_matrix_finit(FILE *stream, mtx_matrix_t *_M) {
   fscanf(stream, "%lf", &mtx_m[num_index++]);                                  \
   c = fgetc(stream);
 
-  // Check if stream has at least one valid number then scan it, otherwise throw
-  // error.
+  // Check if stream has at least one valid number then scan it, throw error
+  // otherwise.
   FSCANF_ONE(stream, "%lf", &mtx_m[num_index++]);
 
   // Read first only row 1
