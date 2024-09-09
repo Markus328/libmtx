@@ -25,9 +25,11 @@ TEST_GROUP_C_WRAPPER(matrix_basic) {
 TEST_ORDERED_C_WRAPPER(matrix_basic, view, 10);
 TEST_ORDERED_C_WRAPPER(matrix_basic, view_fail, 10);
 TEST_ORDERED_C_WRAPPER(matrix_basic, view_free, 10);
-TEST_ORDERED_C_WRAPPER(matrix_basic, clone, 11);
-TEST_ORDERED_C_WRAPPER(matrix_basic, copy, 11);
-TEST_ORDERED_C_WRAPPER(matrix_basic, copy_overlap, 11);
+TEST_ORDERED_C_WRAPPER(matrix_basic, fill, 11);
+TEST_ORDERED_C_WRAPPER(matrix_basic, equals, 12);
+TEST_ORDERED_C_WRAPPER(matrix_basic, clone, 13);
+TEST_ORDERED_C_WRAPPER(matrix_basic, copy, 13);
+TEST_ORDERED_C_WRAPPER(matrix_basic, copy_overlap, 13);
 
 TEST_GROUP_C_WRAPPER(matrix_io) {
   TEST_GROUP_C_SETUP_WRAPPER(matrix_io);

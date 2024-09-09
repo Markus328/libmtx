@@ -124,6 +124,40 @@ MAKE_TEST(matrix_lifecycle, raw_a) {
   mtx_matrix_unref(&m);
 }
 
+MAKE_TEST(matrix_basic, equals) {
+  mock_c()->disable();
+  mtx_matrix_t m = M;
+
+  CHECK_C_TEXT(mtx_matrix_equals(&m, &M),
+               "m and M are equal, but mtx_matrix_equals() sees their "
+               "(unexistent) differences.");
+  m.dx--;
+
+  CHECK_C_TEXT(!mtx_matrix_equals(&M, &m),
+               "M is more fat than m and mtx_matrix_equals() thinks its just a "
+               "feeling.");
+
+  m.dx = M.dx;
+  m.offY++; // Makes m also invalid.
+
+  CHECK_C_TEXT(!mtx_matrix_equals(&m, &M),
+               "M is taller than m but mtx_matrix_equals() is so big as "
+               "it can't see any difference.");
+
+  mtx_matrix_t ref, copy;
+
+  double arr[4] = {1, 2, 3, 4};
+
+  mtx_matrix_ref_a(&ref, arr, 2, 2);
+  mtx_matrix_init(&copy, 2, 2);
+  mtx_matrix_fill_a(&copy, arr);
+
+  CHECK_C_TEXT(mtx_matrix_equals(&ref, &copy), "mtx_matrix_equals() is just tired.");
+
+  mtx_matrix_unref(&ref);
+  mtx_matrix_free(&copy);
+}
+
 MAKE_TEST(matrix_basic, clone) {
 
   mock_c()->expectNCalls(M_DY, "memcpy_mock");
@@ -289,6 +323,30 @@ MAKE_TEST(matrix_io, fprint) {
   FIOTEST(fprint, fprintf, (m.matrix.dx + 1) * m.matrix.dy);
 }
 
+MAKE_TEST(matrix_io, finit) {
+  mtx_matrix_t m;
+  FILE *fd = test_matrix_from(G_NAME, T_NAME, "default.txt");
+
+  mock_c()->expectNCalls(1 + 2, "malloc_mock"); // elements + metadata malloc()
+  mock_c()
+      ->expectNCalls(10, "fscanf_mock")
+      ->withPointerParameters("stream", fd);
+
+  mtx_matrix_finit(fd, &m);
+  fclose(fd);
+
+  mock_c()->disable();
+
+  CHECK_C(m.dx == m.dy && m.dx == 3);
+  double arr[9] = {2, 3, 1, 48, -24.3, 1e-242, -3.342e+119, 0, -0.00044342};
+
+  mtx_matrix_view_t A = mtx_matrix_view_of(&M, 0, 0, 3, 3);
+  mtx_matrix_fill_a(&A.matrix, arr);
+  CHECK_C(mtx_matrix_equals(&A.matrix, &m));
+
+  mtx_matrix_free(&m);
+}
+
 #define FIOTEST_FAIL(variation, sys_fun)                                       \
   mock_c()->disable();                                                         \
   mtx_matrix_view_t m = mtx_matrix_view_of(&M, 3, 3, 2, 2);                    \
@@ -314,29 +372,6 @@ MAKE_TEST(matrix_io, fprint) {
 
 MAKE_TEST(matrix_io, fread_fail) { FIOTEST_FAIL(fread, fscanf); }
 MAKE_TEST(matrix_io, fprint_fail) { FIOTEST_FAIL(fprint, fprintf); }
-
-MAKE_TEST(matrix_io, finit) {
-  mtx_matrix_t m;
-  FILE *fd = test_matrix_from(G_NAME, T_NAME, "default.txt");
-
-  mock_c()->expectNCalls(1 + 2, "malloc_mock"); // elements + metadata malloc()
-  mock_c()
-      ->expectNCalls(10, "fscanf_mock")
-      ->withPointerParameters("stream", fd);
-
-  mtx_matrix_finit(fd, &m);
-  fclose(fd);
-
-  mock_c()->disable();
-
-  double arr[9] = {2, 3, 1, 48, -24.3, 1e-242, -3.342e+119, 0, -0.00044342};
-
-  mtx_matrix_view_t A = mtx_matrix_view_of(&M, 0, 0, 3, 3);
-  mtx_matrix_fill_a(&A.matrix, arr);
-  CHECK_C(mtx_matrix_equals(&A.matrix, &m));
-
-  mtx_matrix_free(&m);
-}
 
 MAKE_TEST(matrix_io, finit_fail) { FIOTEST_FAIL(finit, fscanf); }
 

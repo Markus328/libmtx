@@ -24,6 +24,7 @@ int fscanf_mock(FILE *stream, const char *format, ...);
 #include "../errors.c"
 #include "../linalg.c"
 #include "../matrix.c"
+#include "../matrix_operations.c"
 
 #undef malloc
 #undef free

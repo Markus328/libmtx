@@ -46,9 +46,11 @@ void test_fail(const char *file, const char *fun, int line, mtx_error_t error,
 
 FILE *test_matrix_from(const char *group_name, const char *test_name,
                        const char *matrix_name);
-mtx_matrix_t test_read_matrix_from(FILE *fd);
 
-#define TEST_GET_PATH(group, test) "files/" #group "/" #test ".txt"
+#define TEST_GET_PATH(GROUP_, TEST_) "files/" #GROUP_ "/" #TEST_ ".txt"
+#define TEST_MTX(VAR_NAME_) mtx_matrix_t VAR_NAME_ = get_mtx_from(DEFAULT_MTX)
+#define TEST_MTX_NAME(VAR_NAME, NAME_) mtx_matrix_t VAR_NAME = get_mtx_from(T_NAME "/" G_NAME "/" name ".txt")
+#define TEST_MTX_PATH(VAR_NAME_, PATH_) mtx_matrix_t VAR_NAME_ = get_mtx_from(PATH_)
 
 mtx_matrix_t get_mtx_from(const char *path);
 

@@ -2,6 +2,7 @@
 #include "atomic_operations.h"
 #include "errors.h"
 #include "matrix.h"
+#include "matrix_operations.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
