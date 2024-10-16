@@ -7,6 +7,11 @@
 extern "C" {
 #endif
 
+typedef mtx_matrix_t mtx_matrix_perm_t;
+
+// Inicializa a matriz _M_PERM como uma matriz de permutação de dimensões dxd.
+void mtx_matrix_init_perm(mtx_matrix_perm_t *_M_PERM, int d);
+
 // Decomposição LU, use as macros mtx_linalg_LU_decomp para decompsição geral e
 // mtx_linalg_LU_decomp_perf para decomposição mais rápida na resolução de
 // sistemas lineares.

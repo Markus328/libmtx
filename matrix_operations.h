@@ -7,9 +7,6 @@ extern "C" {
 
 #include "matrix.h"
 
-// Inicializa a matriz _M_PERM como uma matriz de permutação de dimensões dxd.
-void mtx_matrix_init_perm(mtx_matrix_perm_t *_M_PERM, int d);
-
 // Transformaa a matriz _M em matriz identidade. Caso _M->dy > _M->dx, apenas a
 // submatriz dyxdy se transforma em identidade e o restante será zerado.
 void mtx_matrix_set_identity(mtx_matrix_t *_M);
@@ -55,9 +52,6 @@ double mtx_matrix_distance(const mtx_matrix_t *A, const mtx_matrix_t *B);
 // ser ignorado.
 double mtx_matrix_distance_each(mtx_matrix_t *_M_D, const mtx_matrix_t *A,
                                 const mtx_matrix_t *B);
-
-
-
 
 
 #ifdef __cplusplus

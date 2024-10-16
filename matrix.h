@@ -23,8 +23,6 @@ typedef struct mtx_matrix_view {
   mtx_matrix_t matrix;
 } mtx_matrix_view_t;
 
-typedef mtx_matrix_t mtx_matrix_perm_t;
-
 #define _mod(x) ((x) < 0 ? -(x) : (x))
 
 #define mtx_matrix_at(M, i, j) (M)->data->m[(M)->offY + i][(M)->offX + j]
@@ -100,7 +98,7 @@ void mtx_matrix_fill_m(mtx_matrix_t *M, double **matrix);
 void mtx_matrix_clone(mtx_matrix_t *_M, const mtx_matrix_t *M);
 
 // Copia os elementos da matriz M_FROM para M_TO.
-int mtx_matrix_copy(mtx_matrix_t *M_TO, const mtx_matrix_t *M_FROM);
+void mtx_matrix_copy(mtx_matrix_t *M_TO, const mtx_matrix_t *M_FROM);
 
 // Retorna uma view (essencialmente uma submatriz) que refere-se a uma parte dos
 // elementos de M_OF, de acordo com a posição relativa e as dimensões
@@ -143,9 +141,8 @@ void mtx_matrix_fprint(FILE *stream, const mtx_matrix_t *M);
 void mtx_matrix_fread(FILE *stream, mtx_matrix_t *M);
 
 // Lê uma matriz de stream, auto-detectando as dimensões e retornando o array
-// que representa os elementos lidos em ordem natural (de cima para baixo e
-// esquerda para direita). Provavelmente isso será usado em conjunto com
-// mtx_matrix_fill_a().
+// que representa os elementos lidos na ordem row-major. Provavelmente isso será
+// usado em conjunto com mtx_matrix_fill_a().
 double *mtx_matrix_fread_raw(FILE *stream, int *dy, int *dx);
 
 // Compara as matrizes A e B. Retorna 1 caso todos os elementos de A sejam

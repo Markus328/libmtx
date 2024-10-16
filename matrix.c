@@ -169,7 +169,7 @@ void mtx_matrix_clone(mtx_matrix_t *_M, const mtx_matrix_t *M) {
   }
 }
 
-int mtx_matrix_copy(mtx_matrix_t *M_TO, const mtx_matrix_t *M_FROM) {
+void mtx_matrix_copy(mtx_matrix_t *M_TO, const mtx_matrix_t *M_FROM) {
   MTX_ENSURE_INIT(M_FROM);
   MTX_ENSURE_INIT(M_TO);
 
@@ -185,7 +185,6 @@ int mtx_matrix_copy(mtx_matrix_t *M_TO, const mtx_matrix_t *M_FROM) {
     copy(mtx_matrix_row(M_TO, i), mtx_matrix_row(M_FROM, i),
          sizeof(double) * M_TO->dx);
   }
-  return 0;
 }
 mtx_matrix_view_t mtx_matrix_view_of(const mtx_matrix_t *M_OF, int init_i,
                                      int init_j, int dy, int dx) {
@@ -253,60 +252,91 @@ void mtx_matrix_fread(FILE *stream, mtx_matrix_t *M) {
   }
 }
 
-void mtx_matrix_finit(FILE *stream, mtx_matrix_t *_M) {
+double *mtx_matrix_fread_raw(FILE *stream, int *dy, int *dx) {
+
   if (stream == NULL) {
     MTX_SYSTEM_ERR("fscanf");
   }
 
-  double *mtx_m = (double *)malloc(MTX_MATRIX_MAX_COLUMNS *
-                                   MTX_MATRIX_MAX_ROWS * sizeof(double));
+  double first_dbl;
 
-  int dx, dy;
-  int num_index = 0;
+  // _dx is the matrix's columns number determined by the number of elements in
+  // the first line. It must be at least 1 . _dy can be of any size, depending
+  // of number of valid lines read. It must be at least 1
+  int _dx, _dy;
 
   int c = ' ';
 
+#define READ_FAIL                                                              \
+  free(mtx_m);                                                                 \
+  MTX_SYSTEM_ERR("fscanf")
+
 #define READ_DBL                                                               \
   if (c != ' ') {                                                              \
-    MTX_SYSTEM_ERR("fscanf");                                                  \
+    READ_FAIL;                                                                 \
   }                                                                            \
   fscanf(stream, "%lf", &mtx_m[num_index++]);                                  \
   c = fgetc(stream);
 
   // Check if stream has at least one valid number then scan it, throw error
   // otherwise.
-  FSCANF_ONE(stream, "%lf", &mtx_m[num_index++]);
+  FSCANF_ONE(stream, "%lf", &first_dbl);
+  c = fgetc(stream);
+
+  // TODO: Decrease the buffer size to avoid memory waste. Maybe
+  // use realloc() when necessary.
+  double *mtx_m = (double *)mtx_mem_alloc(MTX_MATRIX_MAX_COLUMNS *
+                                          MTX_MATRIX_MAX_ROWS * sizeof(double));
+  int num_index = 0;
+
+  mtx_m[num_index++] = first_dbl;
 
   // Read first only row 1
-  for (dx = 1; dx < MTX_MATRIX_MAX_COLUMNS && c != EOF && c != '\n'; ++dx) {
+  for (_dx = 1; c != EOF && c != '\n'; ++_dx) {
+    if (_dx > MTX_MATRIX_MAX_COLUMNS) {
+      READ_FAIL;
+    }
     READ_DBL;
   }
-  for (dy = 1; dy < MTX_MATRIX_MAX_ROWS && c != EOF; ++dy) {
-    c = ' ';
+  for (_dy = 1; _dy < MTX_MATRIX_MAX_ROWS && c != EOF; ++_dy) {
 
-    READ_DBL;
-    if (c == EOF || c == '\n') {
+    assert(c == '\n');
+    if (fscanf(stream, "%lf", &mtx_m[num_index++]) != 1) {
       break;
     }
+
+    c = fgetc(stream);
     int dxi = 1;
-    for (; dxi < MTX_MATRIX_MAX_COLUMNS && c != EOF && c != '\n'; ++dxi) {
+    for (; dxi <= _dx && c != EOF && c != '\n'; ++dxi) {
       READ_DBL;
     }
-    if (dxi < dx) {
-      MTX_SYSTEM_ERR("fscanf");
-    } else if (dxi > dx) {
-      MTX_SYSTEM_ERR("fscanf");
+    if (dxi < _dx) {
+      READ_FAIL;
+    } else if (dxi > _dx) {
+      READ_FAIL;
     }
   }
 
 #undef READ_DBL
+#undef READ_FAIL
 
-  double *tmp_ptr = (double *)realloc(mtx_m, dy * dx * sizeof(double));
+  double *tmp_ptr = (double *)realloc(mtx_m, _dy * _dx * sizeof(double));
   if (tmp_ptr == NULL) {
     free(mtx_m);
     MTX_SYSTEM_ERR("realloc");
   }
 
+  mtx_m = tmp_ptr;
+
+  *dx = _dx;
+  *dy = _dy;
+  return mtx_m;
+}
+
+void mtx_matrix_finit(FILE *stream, mtx_matrix_t *_M) {
+
+  int dx, dy;
+  double *mtx_m = mtx_matrix_fread_raw(stream, &dy, &dx);
   mtx_matrix_ref_a(_M, mtx_m, dy, dx);
 }
 

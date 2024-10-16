@@ -9,7 +9,7 @@
     };
   in {
     devShells.x86_64-linux.default = pkgs.mkShell {
-      buildInputs = with pkgs; [gsl cpputest];
+      buildInputs = with pkgs; [gsl cpputest (python3.withPackages (py: [py.numpy]))];
       packages = with pkgs; [gdb];
     };
   };

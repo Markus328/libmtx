@@ -40,8 +40,19 @@ TEST_ORDERED_C_WRAPPER(matrix_io, fread, 20);
 TEST_ORDERED_C_WRAPPER(matrix_io, fprint, 20);
 TEST_ORDERED_C_WRAPPER(matrix_io, fread_fail, 20);
 TEST_ORDERED_C_WRAPPER(matrix_io, fprint_fail, 20);
-TEST_ORDERED_C_WRAPPER(matrix_io, finit, 20);
+TEST_ORDERED_C_WRAPPER(matrix_io, fread_raw, 20);
 TEST_ORDERED_C_WRAPPER(matrix_io, finit_fail, 20);
+
+// MATRIX OPERATIONS
+
+TEST_GROUP_C_WRAPPER(matrix_arithmetic) {
+  TEST_GROUP_C_SETUP_WRAPPER(matrix_arithmetic);
+  TEST_GROUP_C_TEARDOWN_WRAPPER(matrix_arithmetic);
+};
+
+TEST_ORDERED_C_WRAPPER(matrix_arithmetic, distance_each, 30);
+TEST_ORDERED_C_WRAPPER(matrix_arithmetic, element_wise, 31);
+
 
 int main(int argc, char **argv) {
 

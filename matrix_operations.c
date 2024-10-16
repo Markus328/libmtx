@@ -3,13 +3,6 @@
 #include "atomic_operations.h"
 #include "errors.h"
 
-void mtx_matrix_init_perm(mtx_matrix_perm_t *_M_PERM, int d) {
-  assert(d <= MTX_MATRIX_MAX_COLUMNS && d <= MTX_MATRIX_MAX_COLUMNS);
-
-  mtx_matrix_init(_M_PERM, d, d);
-  mtx_matrix_set_identity(_M_PERM);
-}
-
 void mtx_matrix_set_identity(mtx_matrix_t *_M) {
   for (int i = 0; i < _M->dy; ++i) {
     int j = 0;
@@ -126,7 +119,6 @@ double mtx_matrix_distance(const mtx_matrix_t *A, const mtx_matrix_t *B) {
 
 double mtx_matrix_distance_each(mtx_matrix_t *_M_D, const mtx_matrix_t *A,
                                 const mtx_matrix_t *B) {
-
   MTX_ENSURE_INIT(A);
   MTX_ENSURE_INIT(B);
   if (!MTX_MATRIX_SAME_DIMENSIONS(A, B)) {
@@ -194,3 +186,5 @@ DEF_MTX_MATRIX_SIMPLE_OP(add, +);
 DEF_MTX_MATRIX_SIMPLE_OP(sub, -);
 DEF_MTX_MATRIX_SIMPLE_OP(mul_elements, *);
 DEF_MTX_MATRIX_SIMPLE_OP(div_elements, /);
+
+#undef DEF_MTX_MATRIX_SIMPLE_OP

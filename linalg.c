@@ -7,6 +7,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+void mtx_matrix_init_perm(mtx_matrix_perm_t *_M_PERM, int d) {
+  assert(d <= MTX_MATRIX_MAX_COLUMNS && d <= MTX_MATRIX_MAX_COLUMNS);
+
+  mtx_matrix_init(_M_PERM, d, d);
+  mtx_matrix_set_identity(_M_PERM);
+}
+
 static int _mtx_row_pivot(double *row, int start, int end) {
   int r = -1;
   for (int i = start; i < end; ++i) {
@@ -136,8 +143,8 @@ int mtx_linalg_LU_decomposition(mtx_matrix_perm_t *__M_PERM,
 
   if (_M_LU->data == NULL) {
     mtx_matrix_clone(_M_LU, M);
-  } else if (!MTX_MATRIX_ARE_SAME(_M_LU, M) && mtx_matrix_copy(_M_LU, M) != 0) {
-    MTX_DIMEN_ERR(_M_LU);
+  } else if (!MTX_MATRIX_ARE_SAME(_M_LU, M)) {
+    mtx_matrix_copy(_M_LU, M);
   }
 
   int permutate = 0;
