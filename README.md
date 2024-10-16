@@ -3,8 +3,6 @@
 This repository is about a very basic header-only lib for matrix operations. 
 It implements some matrix and linear algebra algorithms such as matrix sum/subtraction/multiplication, matrix distance, LU decomposition, determinant and back/forward substitution for solving linear systems.
 
-It probably would be better (and easier) do it in C++, making use of templates.
-
 This project was inspired by GNU GSL.
 
 # Tests
