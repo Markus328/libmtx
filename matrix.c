@@ -75,7 +75,7 @@ static inline void __reference_arr(mtx_matrix_t *_M, double *arr, int dy,
 void mtx_matrix_init(mtx_matrix_t *_M, int dy, int dx) {
   __configure_matrix(_M, dy, dx);
 
-  double *m = (double *)malloc(dy * dx * sizeof(double));
+  double *m = (double *)mtx_mem_alloc(dy * dx * sizeof(double));
   __reference_arr(_M, m, dy, dx);
 }
 
