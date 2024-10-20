@@ -308,6 +308,41 @@ int mtx_linalg_permutate(mtx_matrix_t *_M, const mtx_matrix_t *M,
   MTX_COMMIT_OUTPUT(permutated, _M);
   return 0;
 }
+
+double mtx_linalg_det_LU(const mtx_matrix_t *M_LU, int signum) {
+
+  MTX_ENSURE_INIT(M_LU);
+  double det = 1;
+  if (signum >= 0) {
+
+    for (int p = 0; p < M_LU->dy; ++p) {
+      det *= mtx_matrix_at(M_LU, p, p);
+    }
+
+    if (signum) {
+      det *= -1;
+    }
+  } else {
+    det = 0;
+  }
+
+  return det;
+}
+
+double mtx_matrix_det(const mtx_matrix_t *M) {
+  MTX_ENSURE_INIT(M);
+  if (!MTX_MATRIX_IS_SQUARE(M)) {
+    MTX_DIMEN_ERR(M);
+  }
+
+  mtx_matrix_t lu = {0};
+
+  int signum = mtx_linalg_LU_decomp_perf(NULL, &lu, M);
+  double det = mtx_linalg_det_LU(&lu, signum);
+
+  mtx_matrix_free(&lu);
+  return det;
+}
 int mtx_linalg_back_subs(mtx_matrix_t *_X, const mtx_matrix_t *U,
                          const mtx_matrix_t *B, int jordan) {
   MTX_ENSURE_INIT(U);

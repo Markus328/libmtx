@@ -1,0 +1,9 @@
+2 3 1
+48    -24.3 1e-242
+-3.342e+119 0  -0.00044342
+This is a single invalid line before the second matrix.
+2.0 3e+0 1
+4.8e+1 -24.3 1e-242
+-3342e+116 0 -4.4342e-4
+
+Both matrices means the same.
