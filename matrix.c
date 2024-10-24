@@ -67,6 +67,9 @@ static void __configure_matrix(mtx_matrix_t *_M, int dy, int dx) {
 
 static inline void __reference_arr(mtx_matrix_t *_M, double *arr, int dy,
                                    int dx) {
+  assert(arr != NULL);
+  assert(dy <= MTX_MATRIX_MAX_ROWS && dx <= MTX_MATRIX_MAX_COLUMNS);
+  assert(dy > 0 && dx > 0);
   for (int i = 0; i < dy; ++i) {
     _M->data->m[i] = &arr[i * dx];
   }
@@ -229,7 +232,7 @@ void mtx_matrix_print(const mtx_matrix_t *M) {
   mtx_matrix_fprint(stdout, M);
 }
 void mtx_matrix_fprint(FILE *stream, const mtx_matrix_t *M) {
-
+  MTX_ENSURE_INIT(M);
   if (stream == NULL) {
     MTX_SYSTEM_ERR("fprintf");
   }
@@ -242,6 +245,7 @@ void mtx_matrix_fprint(FILE *stream, const mtx_matrix_t *M) {
 }
 
 void mtx_matrix_fread(FILE *stream, mtx_matrix_t *M) {
+  MTX_ENSURE_INIT(M);
   if (stream == NULL) {
     MTX_SYSTEM_ERR("fscanf");
   }
@@ -345,6 +349,8 @@ void mtx_matrix_finit(FILE *stream, mtx_matrix_t *_M) {
     mtx_matrix_ref_a(_M, mtx_m, dy, dx);
   } else {
     _M->data = NULL;
+    _M->dx = 0;
+    _M->dy = 0;
   }
 }
 
