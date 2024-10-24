@@ -1,0 +1,6 @@
+This is an invalid line...
+1 2 3 2
+9 1 2 9
+9 0
+1 0 7 9
+The matrix below has one of its rows incomplete, hence, cannot be read.
