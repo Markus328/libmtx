@@ -269,18 +269,23 @@ double *mtx_matrix_fread_raw(FILE *stream, int *dy, int *dx) {
 
 #define READ_FAIL                                                              \
   free(mtx_m);                                                                 \
-  MTX_SYSTEM_ERR("fscanf")
+  return NULL;
 
 #define READ_DBL                                                               \
   if (c != ' ') {                                                              \
-    READ_FAIL;                                                                 \
+    break;                                                                     \
   }                                                                            \
   fscanf(stream, "%lf", &mtx_m[num_index++]);                                  \
   c = fgetc(stream);
 
   // Check if stream has at least one valid number then scan it, throw error
   // otherwise.
-  FSCANF_ONE(stream, "%lf", &first_dbl);
+  int f_ret;
+  if ((f_ret = fscanf(stream, "%lf", &first_dbl)) == 0) {
+    return NULL;
+  } else if (f_ret == EOF) {
+    MTX_SYSTEM_ERR("fscanf");
+  }
   c = fgetc(stream);
 
   // TODO: Decrease the buffer size to avoid memory waste. Maybe
@@ -300,8 +305,7 @@ double *mtx_matrix_fread_raw(FILE *stream, int *dy, int *dx) {
   }
   for (_dy = 1; _dy < MTX_MATRIX_MAX_ROWS && c != EOF; ++_dy) {
 
-    assert(c == '\n');
-    if (fscanf(stream, "%lf", &mtx_m[num_index++]) != 1) {
+    if (c != '\n' || fscanf(stream, "%lf", &mtx_m[num_index++]) != 1) {
       break;
     }
 
@@ -337,7 +341,11 @@ void mtx_matrix_finit(FILE *stream, mtx_matrix_t *_M) {
 
   int dx, dy;
   double *mtx_m = mtx_matrix_fread_raw(stream, &dy, &dx);
-  mtx_matrix_ref_a(_M, mtx_m, dy, dx);
+  if (mtx_m != NULL) {
+    mtx_matrix_ref_a(_M, mtx_m, dy, dx);
+  } else {
+    _M->data = NULL;
+  }
 }
 
 int mtx_matrix_equals(const mtx_matrix_t *A, const mtx_matrix_t *B) {

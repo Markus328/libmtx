@@ -104,8 +104,8 @@ mtx_matrix_t next_matrix_of(struct test_mtx_files *files,
   FILE *stream = get_mtx_fd(files, filename)->stream;
 
   while (!feof(stream)) {
-    TRY mtx_matrix_finit(stream, &m);
-    CATCH(INTEGER, error) {
+    mtx_matrix_finit(stream, &m);
+    if (m.data == NULL) {
       int c;
       while ((c = fgetc(stream)) != '\n' && c != EOF)
         ;

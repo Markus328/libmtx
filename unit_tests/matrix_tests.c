@@ -25,7 +25,6 @@ TEST_GROUP_C_TEARDOWN(matrix_lifecycle) {
 MAKE_TEST(matrix_lifecycle, init) {
 
   // mtx_default_mem_alloc being tested
-  mtx_cfg_set_mem_alloc(mtx_default_mem_alloc);
 
   mock_c()->expectNCalls(3, "malloc_mock");
 
@@ -43,8 +42,6 @@ MAKE_TEST(matrix_lifecycle, init_fail) {
   mtx_matrix_t m = {0};
 
   int d = 5;
-
-  mtx_cfg_set_error_handler(test_fail);
 
   // Emulate malloc() error
   mock_c()->expectOneCall("malloc_mock")->andReturnPointerValue(NULL);
@@ -399,36 +396,40 @@ MAKE_TEST(matrix_io, fread_raw) {
 MAKE_TEST(matrix_io, fread_raw_fail) {
   FILE *fd = get_mtx_fd(__TEST_FILES, "default")->stream;
 
-  // Before allocation fails
-
-  mock_c()->expectNoCall("malloc_mock");
-
   int dy, dx;
   double *raw;
 
   // Null pointer to stream
   mock_c()->expectNoCall("fscanf_mock");
+  mock_c()->expectNoCall("malloc_mock");
   mock_c()
       ->expectOneCall("test_fail")
       ->withIntParameters("error", MTX_SYSTEM_ERR);
 
   TRY mtx_matrix_fread_raw(NULL, &dy, &dx);
-  CATCH(INTEGER, error1) {}
+  CATCH(INTEGER, null_err) {}
 
   mock_c()->checkExpectations();
 
   // Invalid line at start.
   mock_c()->expectOneCall("fscanf_mock")->withPointerParameters("stream", fd);
-  mock_c()
-      ->expectOneCall("test_fail")
-      ->withIntParameters(
-          "error", MTX_SYSTEM_ERR); // TODO: Make function return non-zero
-                                    // instead of throwing error in the case of
-                                    // a matrix cannot be found
-  TRY mtx_matrix_fread_raw(fd, &dy, &dx);
-  CATCH(INTEGER, error2) {}
+  CHECK_C(mtx_matrix_fread_raw(fd, &dy, &dx) == NULL);
 
-  
+  mock_c()->checkExpectations();
+
+  mock_c()->clear();
+
+  int c;
+  while ((c = fgetc(fd)) != EOF && c != '\n')
+    ;
+
+  // Row length doesn't match the first row's.
+  mock_c()->expectOneCall("malloc_mock");
+  mock_c()->expectOneCall("free_mock");
+  mock_c()
+      ->expectNCalls(10, "fscanf_mock")
+      ->withPointerParameters("stream", fd);
+  CHECK_C(mtx_matrix_fread_raw(fd, &dy, &dx) == NULL);
 }
 
 #ifdef __cplusplus
