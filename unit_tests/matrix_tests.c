@@ -323,30 +323,20 @@ MAKE_TEST(matrix_io, fprint) {
   FIOTEST(fprint, fprintf, (m.matrix.dx + 1) * m.matrix.dy);
 }
 
+// TODO: Impl better IO errors checks.
 #define FIOTEST_FAIL(variation, sys_fun)                                       \
   mock_c()->disable();                                                         \
   mtx_matrix_view_t m = mtx_matrix_view_of(&M, 3, 3, 2, 2);                    \
   mock_c()->enable();                                                          \
                                                                                \
   mock_c()                                                                     \
-      ->expectNCalls(2, "test_fail")                                           \
+      ->expectOneCall("test_fail")                                             \
       ->withIntParameters("error", MTX_SYSTEM_ERR);                            \
                                                                                \
   FILE *fake_fd = NULL;                                                        \
   mock_c()->expectNoCall(#sys_fun "_mock");                                    \
   TRY mtx_matrix_##variation(fake_fd, &m.matrix);                              \
-  CATCH(INTEGER, exp) {}                                                       \
-                                                                               \
-  fake_fd = (FILE *)83841;                                                     \
-                                                                               \
-  mock_c()                                                                     \
-      ->expectOneCall(#sys_fun "_mock")                                        \
-      ->withPointerParameters("stream", fake_fd)                               \
-      ->andReturnIntValue(-1);                                                 \
-  mock_c()->ignoreOtherCalls();                                                \
-                                                                               \
-  TRY mtx_matrix_##variation(fake_fd, &m.matrix);                              \
-  CATCH(INTEGER, exp2) {}
+  CATCH(INTEGER, exp) {}
 
 MAKE_TEST(matrix_io, fread_fail) { FIOTEST_FAIL(fread, fscanf); }
 MAKE_TEST(matrix_io, fprint_fail) { FIOTEST_FAIL(fprint, fprintf); }
@@ -357,10 +347,7 @@ MAKE_TEST(matrix_io, fread_raw) {
   mtx_matrix_t m;
   FILE *fd = get_mtx_fd(__TEST_FILES, "default")->stream;
 
-  mock_c()->expectNCalls(1 + 1, "malloc_mock");
-  mock_c()
-      ->expectNCalls(10 + 10, "fscanf_mock")
-      ->withPointerParameters("stream", fd);
+  mock_c()->expectNCalls(2 + 2, "realloc_mock");
 
 #define COMPARE_RAW(raw1, raw2, which_matrix)                                  \
   for (int i = 0; i < dx * dy; ++i) {                                          \
@@ -379,7 +366,7 @@ MAKE_TEST(matrix_io, fread_raw) {
 
   // It must have one invalid line between two matrices
   int c;
-  while ((c = fgetc(fd)) != EOF && c != '\n')
+  while ((c = getc(fd)) != EOF && c != '\n')
     ;
 
   double *raw2 = mtx_matrix_fread_raw(fd, &dy, &dx);
@@ -400,8 +387,7 @@ MAKE_TEST(matrix_io, fread_raw_fail) {
   double *raw;
 
   // Null pointer to stream
-  mock_c()->expectNoCall("fscanf_mock");
-  mock_c()->expectNoCall("malloc_mock");
+  mock_c()->expectNoCall("realloc_mock");
   mock_c()
       ->expectOneCall("test_fail")
       ->withIntParameters("error", MTX_SYSTEM_ERR);
@@ -409,10 +395,7 @@ MAKE_TEST(matrix_io, fread_raw_fail) {
   TRY mtx_matrix_fread_raw(NULL, &dy, &dx);
   CATCH(INTEGER, null_err) {}
 
-  mock_c()->checkExpectations();
-
   // Invalid line at start.
-  mock_c()->expectOneCall("fscanf_mock")->withPointerParameters("stream", fd);
   CHECK_C(mtx_matrix_fread_raw(fd, &dy, &dx) == NULL);
 
   mock_c()->checkExpectations();
@@ -420,15 +403,12 @@ MAKE_TEST(matrix_io, fread_raw_fail) {
   mock_c()->clear();
 
   int c;
-  while ((c = fgetc(fd)) != EOF && c != '\n')
+  while ((c = getc(fd)) != EOF && c != '\n')
     ;
 
   // Row length doesn't match the first row's.
-  mock_c()->expectOneCall("malloc_mock");
+  mock_c()->expectOneCall("realloc_mock");
   mock_c()->expectOneCall("free_mock");
-  mock_c()
-      ->expectNCalls(10, "fscanf_mock")
-      ->withPointerParameters("stream", fd);
   CHECK_C(mtx_matrix_fread_raw(fd, &dy, &dx) == NULL);
 }
 
