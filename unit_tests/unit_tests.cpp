@@ -1,3 +1,4 @@
+#include "test_utils.h"
 #include <CppUTest/CommandLineTestRunner.h>
 #include <CppUTest/TestHarness_c.h>
 #include <CppUTestExt/OrderedTest.h>
@@ -41,6 +42,7 @@ TEST_ORDERED_C_WRAPPER(matrix_io, fprint, 20);
 TEST_ORDERED_C_WRAPPER(matrix_io, fread_fail, 20);
 TEST_ORDERED_C_WRAPPER(matrix_io, fprint_fail, 20);
 TEST_ORDERED_C_WRAPPER(matrix_io, fread_raw, 20);
+TEST_ORDERED_C_WRAPPER(matrix_io, fread_raw_fail, 20);
 TEST_ORDERED_C_WRAPPER(matrix_io, finit_fail, 20);
 
 // MATRIX OPERATIONS
@@ -52,9 +54,11 @@ TEST_GROUP_C_WRAPPER(matrix_arithmetic) {
 
 TEST_ORDERED_C_WRAPPER(matrix_arithmetic, distance_each, 30);
 TEST_ORDERED_C_WRAPPER(matrix_arithmetic, element_wise, 31);
-
+TEST_ORDERED_C_WRAPPER(matrix_arithmetic, mul, 31);
+TEST_ORDERED_C_WRAPPER(matrix_arithmetic, s_mul, 31);
 
 int main(int argc, char **argv) {
-
+  mtx_cfg_set_mem_alloc(mtx_default_mem_alloc);
+  mtx_cfg_set_error_handler(test_fail);
   CommandLineTestRunner::RunAllTests(argc, argv);
 }

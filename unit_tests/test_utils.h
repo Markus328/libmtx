@@ -60,8 +60,7 @@ extern struct exception_stack __EXP_STACK;
   EXCEPTION_DATA.state = setjmp(EXCEPTION_DATA.buffer);                        \
   if (EXCEPTION_DATA.state != 0) {                                             \
     __EXP_STACK.size--;                                                        \
-  }                                                                            \
-  if (EXCEPTION_DATA.state == 0) {
+  } else {
 
 #define CATCH(data_type, var_name)                                             \
   __EXP_STACK.size--;                                                          \

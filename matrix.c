@@ -2,6 +2,7 @@
 #include "atomic_operations.h"
 #include "errors.h"
 #include <assert.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -67,6 +68,9 @@ static void __configure_matrix(mtx_matrix_t *_M, int dy, int dx) {
 
 static inline void __reference_arr(mtx_matrix_t *_M, double *arr, int dy,
                                    int dx) {
+  assert(arr != NULL);
+  assert(dy <= MTX_MATRIX_MAX_ROWS && dx <= MTX_MATRIX_MAX_COLUMNS);
+  assert(dy > 0 && dx > 0);
   for (int i = 0; i < dy; ++i) {
     _M->data->m[i] = &arr[i * dx];
   }
@@ -75,7 +79,7 @@ static inline void __reference_arr(mtx_matrix_t *_M, double *arr, int dy,
 void mtx_matrix_init(mtx_matrix_t *_M, int dy, int dx) {
   __configure_matrix(_M, dy, dx);
 
-  double *m = (double *)malloc(dy * dx * sizeof(double));
+  double *m = (double *)mtx_mem_alloc(dy * dx * sizeof(double));
   __reference_arr(_M, m, dy, dx);
 }
 
@@ -229,7 +233,7 @@ void mtx_matrix_print(const mtx_matrix_t *M) {
   mtx_matrix_fprint(stdout, M);
 }
 void mtx_matrix_fprint(FILE *stream, const mtx_matrix_t *M) {
-
+  MTX_ENSURE_INIT(M);
   if (stream == NULL) {
     MTX_SYSTEM_ERR("fprintf");
   }
@@ -242,6 +246,7 @@ void mtx_matrix_fprint(FILE *stream, const mtx_matrix_t *M) {
 }
 
 void mtx_matrix_fread(FILE *stream, mtx_matrix_t *M) {
+  MTX_ENSURE_INIT(M);
   if (stream == NULL) {
     MTX_SYSTEM_ERR("fscanf");
   }
@@ -252,92 +257,77 @@ void mtx_matrix_fread(FILE *stream, mtx_matrix_t *M) {
   }
 }
 
+static inline int __char_is_del(char c, const char *dels);
+static inline double *__next_mtx_dbl(double **mtx, size_t *size_d,
+                                     size_t *max_size_d);
+static int read_line(double **mtx, size_t *size_d, size_t *max_size_d,
+                     FILE *stream);
+
+// TODO: Make possible to pass custom delimiters used for separation of numbers
+// read.
 double *mtx_matrix_fread_raw(FILE *stream, int *dy, int *dx) {
 
   if (stream == NULL) {
     MTX_SYSTEM_ERR("fscanf");
   }
 
-  double first_dbl;
+  double *mtx = NULL;
+  // Variables determining the size of matrix with currently read numbers and
+  // currently max capacity.
+  size_t size_d = 0, max_size_d = 0;
 
-  // _dx is the matrix's columns number determined by the number of elements in
-  // the first line. It must be at least 1 . _dy can be of any size, depending
-  // of number of valid lines read. It must be at least 1
+  // _dx is the matrix's columns number determined by the number of elements
+  // in the first line. It must be at least 1 . _dy can be of any size,
+  // depending of number of valid lines read. It must be at least 1
   int _dx, _dy;
 
-  int c = ' ';
-
-#define READ_FAIL                                                              \
-  free(mtx_m);                                                                 \
-  MTX_SYSTEM_ERR("fscanf")
-
-#define READ_DBL                                                               \
-  if (c != ' ') {                                                              \
-    READ_FAIL;                                                                 \
-  }                                                                            \
-  fscanf(stream, "%lf", &mtx_m[num_index++]);                                  \
-  c = fgetc(stream);
-
-  // Check if stream has at least one valid number then scan it, throw error
-  // otherwise.
-  FSCANF_ONE(stream, "%lf", &first_dbl);
-  c = fgetc(stream);
-
-  // TODO: Decrease the buffer size to avoid memory waste. Maybe
-  // use realloc() when necessary.
-  double *mtx_m = (double *)mtx_mem_alloc(MTX_MATRIX_MAX_COLUMNS *
-                                          MTX_MATRIX_MAX_ROWS * sizeof(double));
-  int num_index = 0;
-
-  mtx_m[num_index++] = first_dbl;
-
-  // Read first only row 1
-  for (_dx = 1; c != EOF && c != '\n'; ++_dx) {
-    if (_dx > MTX_MATRIX_MAX_COLUMNS) {
-      READ_FAIL;
+  int ret;
+  while (size_d == 0) {
+    if ((ret = read_line(&mtx, &size_d, &max_size_d, stream)) != 0 &&
+        size_d == 0) {
+      return NULL;
     }
-    READ_DBL;
   }
-  for (_dy = 1; _dy < MTX_MATRIX_MAX_ROWS && c != EOF; ++_dy) {
+  _dx = size_d;
+  _dy = 1;
 
-    assert(c == '\n');
-    if (fscanf(stream, "%lf", &mtx_m[num_index++]) != 1) {
+  for (; ret == 0; ++_dy) {
+    size_t prev_size_d = size_d;
+    ret = read_line(&mtx, &size_d, &max_size_d, stream);
+
+    size_t els_read = size_d - prev_size_d;
+
+    if (els_read == 0) {
       break;
-    }
-
-    c = fgetc(stream);
-    int dxi = 1;
-    for (; dxi <= _dx && c != EOF && c != '\n'; ++dxi) {
-      READ_DBL;
-    }
-    if (dxi < _dx) {
-      READ_FAIL;
-    } else if (dxi > _dx) {
-      READ_FAIL;
+    } else if (els_read != _dx) {
+      free(mtx);
+      return NULL;
     }
   }
 
-#undef READ_DBL
-#undef READ_FAIL
-
-  double *tmp_ptr = (double *)realloc(mtx_m, _dy * _dx * sizeof(double));
-  if (tmp_ptr == NULL) {
-    free(mtx_m);
+  double *fixed_mtx = (double *)realloc(mtx, sizeof(double) * _dy * _dx);
+  if (fixed_mtx == NULL) {
+    free(mtx);
     MTX_SYSTEM_ERR("realloc");
   }
 
-  mtx_m = tmp_ptr;
-
-  *dx = _dx;
   *dy = _dy;
-  return mtx_m;
+  *dx = _dx;
+
+  return fixed_mtx;
 }
 
 void mtx_matrix_finit(FILE *stream, mtx_matrix_t *_M) {
 
   int dx, dy;
   double *mtx_m = mtx_matrix_fread_raw(stream, &dy, &dx);
-  mtx_matrix_ref_a(_M, mtx_m, dy, dx);
+  if (mtx_m != NULL) {
+    mtx_matrix_ref_a(_M, mtx_m, dy, dx);
+  } else {
+    _M->data = NULL;
+    _M->dx = 0;
+    _M->dy = 0;
+  }
 }
 
 int mtx_matrix_equals(const mtx_matrix_t *A, const mtx_matrix_t *B) {
@@ -355,6 +345,102 @@ int mtx_matrix_equals(const mtx_matrix_t *A, const mtx_matrix_t *B) {
       if (mtx_matrix_at(A, i, j) != mtx_matrix_at(B, i, j)) {
         return 0;
       }
+    }
+  }
+
+  return 1;
+}
+
+static inline int __char_is_del(char c, const char *dels) {
+  while (*dels != '\0') {
+    if (c == *(dels++)) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+static inline double *__next_mtx_dbl(double **mtx, size_t *size_d,
+                                     size_t *max_size_d) {
+  if ((*size_d) >= *max_size_d) {
+    *mtx = (double *)realloc(*mtx, (*max_size_d += MTX_MATRIX_MAX_COLUMNS) *
+                                       sizeof(double));
+    if (*mtx == NULL) {
+      MTX_SYSTEM_ERR("realloc");
+    }
+  }
+  return &(*mtx)[(*size_d)++];
+}
+
+static int read_line(double **mtx, size_t *size_d, size_t *max_size_d,
+                     FILE *stream) {
+  char num_buf[32];
+  int nbuf_size = 0;
+
+#define READ                                                                   \
+  do {                                                                         \
+    if (nbuf_size > 0) {                                                       \
+      num_buf[nbuf_size] = '\0';                                               \
+      int num_size;                                                            \
+      sscanf(num_buf, "%lf%n", __next_mtx_dbl(mtx, size_d, max_size_d),        \
+             &num_size);                                                       \
+      if (num_size < nbuf_size) {                                              \
+        return 1;                                                              \
+      }                                                                        \
+    }                                                                          \
+  } while (0);
+
+#define STOP_READ(ret)                                                         \
+  READ;                                                                        \
+  return ret;
+
+  const char dels[4] = ",\t ";
+
+  int c;
+  while ((c = getc(stream)) != EOF) {
+    int char_is_del;
+
+    if (isspace(c) && !isblank(c)) {
+      // In any case if a /n, /f, /r, etc. Stop the read and store pending
+      // number.
+      STOP_READ(0);
+    }
+
+    // WAIT FOR NUMBER: if nbuf_size >= 0 and its not a blank, try to read a
+    // char of number.
+    if ((isdigit(c) || c == '-' || c == '+' || c == 'e' || c == '.') &&
+        nbuf_size >= 0) {
+      if (nbuf_size >= sizeof(num_buf)) {
+        STOP_READ(1);
+      }
+      num_buf[nbuf_size++] = c;
+    }
+    // WAIT FOR DELIMITER: if nbuf_size < 0 only accept a
+    // delimiter or blanks.
+    else if (nbuf_size < 0) {
+      if ((char_is_del = __char_is_del(c, dels))) {
+        nbuf_size = 0;
+        continue;
+      } else if (!isblank(c)) {
+        return 1;
+      }
+    }
+
+    // If nbuf_size >= 0 and its not a number char but its a
+    // delimiter, store pending number. After that, restart to read number
+    // chars.
+    else if (__char_is_del(c, dels)) {
+      READ;
+      nbuf_size = 0;
+    } // If is blank, store the pending number if it exists, after that, ONLY
+    // accept new blanks or delimiter (setting nbuf_size < 0);
+    else if (isblank(c)) {
+      if (nbuf_size > 0) {
+        READ;
+        nbuf_size = -1;
+      }
+    } else {
+      STOP_READ(1);
     }
   }
 

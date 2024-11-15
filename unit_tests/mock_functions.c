@@ -8,6 +8,7 @@ extern "C" {
 #endif
 
 void *malloc_mock(size_t size);
+void *realloc_mock(void *ptr, size_t size);
 void free_mock(void *p);
 void *memcpy_mock(void *dest, const void *src, size_t size);
 void *memmove_mock(void *dest, const void *src, size_t size);
@@ -15,6 +16,7 @@ int fprintf_mock(FILE *stream, const char *format, ...);
 int fscanf_mock(FILE *stream, const char *format, ...);
 
 #define malloc malloc_mock
+#define realloc realloc_mock
 #define free free_mock
 #define memcpy memcpy_mock
 #define memmove memmove_mock
@@ -27,6 +29,7 @@ int fscanf_mock(FILE *stream, const char *format, ...);
 #include "../matrix_operations.c"
 
 #undef malloc
+#undef realloc
 #undef free
 #undef memcpy
 #undef memmove
@@ -39,6 +42,13 @@ void *malloc_mock(size_t size) {
     return act->pointerReturnValue();
   }
   return malloc(size);
+}
+void *realloc_mock(void *ptr, size_t size) {
+  MockActualCall_c *act = mock_c()->actualCall(__func__);
+  if (act->hasReturnValue()) {
+    return act->pointerReturnValue();
+  }
+  return realloc(ptr, size); 
 }
 void free_mock(void *p) {
   MockActualCall_c *act = mock_c()->actualCall(__func__);
