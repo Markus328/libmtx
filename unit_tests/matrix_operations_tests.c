@@ -63,21 +63,22 @@ MAKE_TEST(matrix_arithmetic, element_wise) {
 MAKE_TEST(matrix_arithmetic, mul) {
   mtx_matrix_t A = NEXT_TEST_MTX;
   mtx_matrix_t B = NEXT_TEST_MTX;
-  mtx_matrix_t C = {0};
+  mtx_matrix_t C = RESERVE_MTX(0, 0, A.dy, B.dx);
   mtx_matrix_t _C = {0};
 
-  C = RESERVE_MTX(0, 0, A.dy, B.dx);
   COPY_NEXT_TEST_MTX(&C);
-
-  _C = RESERVE_MTX(0, C.dx, C.dy, C.dx);
 
   mtx_matrix_mul(&_C, &A, &B);
 
+  CHECK_C_TEXT(MTX_MATRIX_SAME_DIMENSIONS(&_C, &C),
+               "mtx_matrix_mul() didn't want to to allocate a suitable matrix "
+               "for the result");
   CHECK_C_TEXT(mtx_matrix_distance(&_C, &C) < MAXIMUM_ERROR,
                "mtx_matrix_mul() forgot how to multiply two matrices.");
 
   mtx_matrix_free(&A);
   mtx_matrix_free(&B);
+  mtx_matrix_free(&_C);
 }
 
 MAKE_TEST(matrix_arithmetic, s_mul) {
@@ -93,7 +94,27 @@ MAKE_TEST(matrix_arithmetic, s_mul) {
   CHECK_C_TEXT(
       mtx_matrix_distance(&B, &_B) < MAXIMUM_ERROR,
       "mtx_matrix_s_mul() doesn't know how to work with scalars (or maybe "
-      "matrices)");
+      "matrices).");
+
+  mtx_matrix_free(&A);
+}
+
+MAKE_TEST(matrix_arithmetic, transpose) {
+  mtx_matrix_t A = NEXT_TEST_MTX;
+  mtx_matrix_t At = RESERVE_MTX(0, 0, A.dx, A.dy);
+  mtx_matrix_t _At = {0};
+
+  COPY_NEXT_TEST_MTX(&At);
+
+  mtx_matrix_transpose(&_At, &A);
+
+  CHECK_C_TEXT(MTX_MATRIX_SAME_DIMENSIONS(&_At, &At),
+               "mtx_matrix_transpose() is confused about the matrix size.");
+  CHECK_C_TEXT(mtx_matrix_equals(&_At, &At),
+               "mtx_matrix_transpose() did its role wrong.");
+
+  mtx_matrix_free(&A);
+  mtx_matrix_free(&_At);
 }
 
 #undef MAXIMUM_ERROR
