@@ -57,6 +57,7 @@ TEST_ORDERED_C_WRAPPER(matrix_arithmetic, element_wise, 31);
 TEST_ORDERED_C_WRAPPER(matrix_arithmetic, mul, 31);
 TEST_ORDERED_C_WRAPPER(matrix_arithmetic, s_mul, 31);
 TEST_ORDERED_C_WRAPPER(matrix_arithmetic, transpose, 31);
+TEST_ORDERED_C_WRAPPER(matrix_arithmetic, set_identity, 31);
 
 int main(int argc, char **argv) {
   mtx_cfg_set_mem_alloc(mtx_default_mem_alloc);

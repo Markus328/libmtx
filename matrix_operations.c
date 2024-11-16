@@ -3,15 +3,15 @@
 #include "atomic_operations.h"
 #include "errors.h"
 
-void mtx_matrix_set_identity(mtx_matrix_t *_M) {
-  for (int i = 0; i < _M->dy; ++i) {
-    int j = 0;
-    for (; j < _M->dx; ++j) {
-      mtx_matrix_at(_M, i, j) = 0;
+void mtx_matrix_set_identity(mtx_matrix_t *M) {
+  MTX_ENSURE_INIT(M);
+
+  int d = M->dx < M->dy ? M->dx : M->dy;
+  for (int i = 0; i < d; ++i) {
+    for (int j = 0; j < d; ++j) {
+      mtx_matrix_at(M, i, j) = 0;
     }
-    if (j > i) {
-      mtx_matrix_at(_M, i, i) = 1;
-    }
+    mtx_matrix_at(M, i, i) = 1;
   }
 }
 

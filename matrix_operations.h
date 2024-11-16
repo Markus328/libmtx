@@ -7,8 +7,8 @@ extern "C" {
 
 #include "matrix.h"
 
-// Transformaa a matriz _M em matriz identidade. Caso _M->dy > _M->dx, apenas a
-// submatriz dyxdy se transforma em identidade e o restante será zerado.
+// Transforma a matriz _M em matriz identidade. Caso _M não seja uma matriz
+// quadrada, essa função atua na primeira e maior submatriz quadrada de _M.
 void mtx_matrix_set_identity(mtx_matrix_t *_M);
 
 // Realiza a multiplicação AxB e salva o resultado em _C.
@@ -53,10 +53,8 @@ double mtx_matrix_distance(const mtx_matrix_t *A, const mtx_matrix_t *B);
 double mtx_matrix_distance_each(mtx_matrix_t *_M_D, const mtx_matrix_t *A,
                                 const mtx_matrix_t *B);
 
-
 #ifdef __cplusplus
 }
 #endif
 
 #endif
-
