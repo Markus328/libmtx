@@ -137,6 +137,8 @@ MAKE_TEST(matrix_arithmetic, set_identity) {
   CHECK_IDENTITY("square");
   CHECK_IDENTITY("dx < dy");
   CHECK_IDENTITY("dx > dy");
+
+#undef CHECK_IDENTITY
 }
 
 #undef MAXIMUM_ERROR
