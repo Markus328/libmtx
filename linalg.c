@@ -343,6 +343,7 @@ double mtx_matrix_det(const mtx_matrix_t *M) {
   mtx_matrix_free(&lu);
   return det;
 }
+
 int mtx_linalg_back_subs(mtx_matrix_t *_X, const mtx_matrix_t *U,
                          const mtx_matrix_t *B, int jordan) {
   MTX_ENSURE_INIT(U);
@@ -395,13 +396,6 @@ int mtx_linalg_back_subs(mtx_matrix_t *_X, const mtx_matrix_t *U,
   return 0;
 }
 
-// Realiza a forward substitution (de cima para baixo) do sistema Lx = B. A
-// matriz L é uma lower triangular.
-//
-// Caso a matriz tenha a diagnonal principal como sendo de apenas 1's, passe
-// jordan = 1 para ignorar a diagnonal, obtendo o mesmo resultado.
-//
-// O resultado (x) é retornada na matriz X.
 int mtx_linalg_forward_subs(mtx_matrix_t *_X, const mtx_matrix_t *L,
                             const mtx_matrix_t *B, int jordan) {
 
@@ -496,11 +490,6 @@ int mtx_linalg_LU_AB_solve(mtx_matrix_t *X, const mtx_matrix_t *AB_LU) {
   return mtx_linalg_back_subs(X, &A.matrix, &B.matrix, 0);
 }
 
-// Resolve o sistema linear Ax = B, representado pela matriz decomposta de A
-// em A_LU e pela matriz B. Tanto A_LU quanto B precisam ter o mesmo número de
-// linhas.
-//
-// Falha caso o sistema seja indeterminado.
 int mtx_linalg_LU_solve(mtx_matrix_t *_X, const mtx_matrix_perm_t *M_PERM,
                         const mtx_matrix_t *A_LU, const mtx_matrix_t *B) {
   MTX_ENSURE_INIT(A_LU);
@@ -527,15 +516,6 @@ int mtx_linalg_LU_solve(mtx_matrix_t *_X, const mtx_matrix_perm_t *M_PERM,
   return 0;
 }
 
-// Refina a solução do sistema linear Ax = B. Recebe _M_WORK como matriz para
-// cálculos intermediários, X a solução atual, M_PERM e A_LU como sendo a matriz
-// de permutação e A decomposto e por fim a matriz A e B originais. No fim da
-// execução, X será substituído por uma versão mais próxima da solução exata.
-//
-//
-// Dado que a resolução de um sistema linear que gerou resíduos: Ax' = B + B', a
-// função retorna a distancia entre B e B', indicando o grau de distancia que a
-// solução exata x tem de x'.
 double mtx_linalg_LU_refine(mtx_matrix_t *_M_WORK, mtx_matrix_t *X,
                             const mtx_matrix_perm_t *M_PERM,
                             const mtx_matrix_t *A_LU, const mtx_matrix_t *A,
