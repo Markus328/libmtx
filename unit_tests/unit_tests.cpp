@@ -69,7 +69,7 @@ TEST_GROUP_C_WRAPPER(linalg) {
   TEST_GROUP_C_TEARDOWN_WRAPPER(linalg);
 };
 
-TEST_ORDERED_C_WRAPPER(linalg, lu_decomp, 40);
+TEST_ORDERED_C_WRAPPER(linalg, permutate, 40);
 
 
 

@@ -101,6 +101,7 @@ extern struct exception_stack __EXP_STACK;
       const char *G_NAME, const char *T_NAME, const char *DEFAULT_MTX,         \
       struct test_mtx_files *__TEST_FILES)
 
+
 void test_fail(const char *file, const char *fun, int line, mtx_error_t error,
                ...);
 
