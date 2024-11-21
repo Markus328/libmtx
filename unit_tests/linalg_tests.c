@@ -3,6 +3,7 @@
 
 #include "../linalg.h"
 #include "../matrix.h"
+#include "../matrix_operations.h"
 #include "routines.h"
 #include "test_utils.h"
 
@@ -22,21 +23,22 @@ MAKE_TEST(linalg, permutate) {
   CALL_ROUTINE(check_3m_i, mtx_linalg_permutate, 0, 3);
 }
 
-// Only for square matrices
-MAKE_TEST(linalg, lu_decomp_square) {
+// MAKE_ROUTINE(lu_decomp, int success, int perf, const char *filename) {
+//   mtx_matrix_t A = next_matrix_of(__TEST_FILES, filename);
 
-  mtx_matrix_t A = NEXT_TEST_MTX_NAME(successful);
+//   mtx_matrix_t _A_LU = RESERVE_MTX(0, 0, A.dy, A.dx);
+//   mtx_matrix_t _P = RESERVE_MTX(_A_LU.dy, 0, _A_LU.dy, _A_LU.dy);
 
-  mtx_matrix_t A_LU = RESERVE_MTX(0, 0, A.dy, A.dx);
-  mtx_matrix_t _A_LU = RESERVE_MTX(0, A_LU.dx, A_LU.dy, A_LU.dx);
-  mtx_matrix_t P = RESERVE_MTX(A_LU.dy, 0, A_LU.dy, A_LU.dx);
-  mtx_matrix_t _P = RESERVE_MTX(A_LU.dy, A_LU.dx, A_LU.dy, A_LU.dx);
+//   int ret = mtx_linalg_LU_decomposition(&_P, &_A_LU, &A, perf);
 
-  COPY_NEXT_TEST_MTX_NAME(&A_LU, successful);
-  COPY_NEXT_TEST_MTX_NAME(&P, successful);
+//   if (success && ret < 0) {
+//     FAIL_TEXT_C("LU decomposition failed when it had to be successful.");
+//   }
 
-  mtx_linalg_LU_decomp(&_P, &_A_LU, &A);
-}
+//   if (!success && ret >= 0) {
+//     FAIL_TEXT_C("LU decomposition was successful when it had to fail.");
+//   }
+// }
 
 #ifdef __cplusplus
 }

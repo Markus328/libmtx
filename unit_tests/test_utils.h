@@ -101,7 +101,6 @@ extern struct exception_stack __EXP_STACK;
       const char *G_NAME, const char *T_NAME, const char *DEFAULT_MTX,         \
       struct test_mtx_files *__TEST_FILES)
 
-
 void test_fail(const char *file, const char *fun, int line, mtx_error_t error,
                ...);
 
@@ -142,6 +141,9 @@ extern mtx_matrix_t M;
 #define M_DX 25
 #define M_DY 25
 
+// TODO: This method is confusing. Implement a method substuting M by a
+// contiguous array and reserve space usingn mtx_matrix_ref_a(). Still slower
+// than views but better.
 #define RESERVE_MTX(init_i, init_j, dy, dx)                                    \
   mtx_matrix_view_of(&M, init_i, init_j, dy, dx).matrix
 

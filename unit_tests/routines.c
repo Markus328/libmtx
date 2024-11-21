@@ -28,6 +28,8 @@ MAKE_ROUTINE(check_3m_i,
   if (mtx_matrix_distance(&_C, &C) > tol) {
     mtx_matrix_free(&C);
 
+    // TODO: Implement a string builder helper to use with CHECK_C_TEXT() or
+    // FAIL_C_TEXT() instead of fprintf() directly.
     fprintf(stderr,
             "check_3m %s/%s: output of function doesn't match the actual "
             "result matrix (%dth CHECK).\n",
