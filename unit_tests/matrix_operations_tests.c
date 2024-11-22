@@ -105,27 +105,25 @@ MAKE_TEST(matrix_arithmetic, transpose) {
   mtx_matrix_free(&A);
   mtx_matrix_free(&_At);
 }
-MAKE_TEST(matrix_arithmetic, set_identity) {
+static MAKE_ROUTINE(check_identity, const char *m_class) {
 
-#define CHECK_IDENTITY(type_matrix)                                            \
-  do {                                                                         \
-    mtx_matrix_t A = NEXT_TEST_MTX;                                            \
-    mtx_matrix_t I = RESERVE_MTX(0, 0, A.dy, A.dx);                            \
-    COPY_NEXT_TEST_MTX(&I);                                                    \
-                                                                               \
-    mtx_matrix_set_identity(&A);                                               \
-                                                                               \
-    CHECK_C_TEXT(                                                              \
-        mtx_matrix_equals(&A, &I),                                             \
-        "mtx_matrix_set_identity() is afraid of going down stairs in "         \
-        "a " type_matrix " matrix.");                                          \
-                                                                               \
-    mtx_matrix_free(&A);                                                       \
-  } while (0);
+  mtx_matrix_t A = NEXT_TEST_MTX;
+  mtx_matrix_t I = RESERVE_MTX(0, 0, A.dy, A.dx);
+  COPY_NEXT_TEST_MTX(&I);
 
-  CHECK_IDENTITY("square");
-  CHECK_IDENTITY("dx < dy");
-  CHECK_IDENTITY("dx > dy");
+  mtx_matrix_set_identity(&A);
+
+  if (!mtx_matrix_equals(&A, &I)) {
+    throw_error("mtx_matrix_set_identity() is afraid of going down stairs in "
+                "a %s matrix.",
+                m_class);
+  }
+
+  mtx_matrix_free(&A);
+} MAKE_TEST(matrix_arithmetic, set_identity) {
+  CALL_ROUTINE(check_identity, "square");
+  CALL_ROUTINE(check_identity, "dx < dy");
+  CALL_ROUTINE(check_identity, "dx > dy");
 }
 
 #undef MAXIMUM_ERROR
