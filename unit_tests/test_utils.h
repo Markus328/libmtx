@@ -19,6 +19,7 @@ typedef struct test_mtx_file {
 } mtx_file;
 
 #define MAX_TEST_FILES 32
+#define MAX_ERROR_LENGHT 255
 
 struct test_mtx_files {
   const char *groupname, *testname;
