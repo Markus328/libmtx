@@ -53,6 +53,14 @@ double mtx_matrix_distance(const mtx_matrix_t *A, const mtx_matrix_t *B);
 double mtx_matrix_distance_each(mtx_matrix_t *_M_D, const mtx_matrix_t *A,
                                 const mtx_matrix_t *B);
 
+// Salva uma matriz triangular superior em _M com os elementos não nulos sendo
+// os respectivos elementos em M.
+int mtx_matrix_get_upper(mtx_matrix_t *_M, const mtx_matrix_t *M);
+
+// Salva uma matriz triangular inferior em _M com os elementos não nulos sendo
+// os respectivos elementos em M.
+// int mtx_matrix_get_lower(mtx_matrix_t *_M, const mtx_matrix_t *M);
+
 #ifdef __cplusplus
 }
 #endif

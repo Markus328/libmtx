@@ -2,6 +2,7 @@
 #include "assert.h"
 #include "atomic_operations.h"
 #include "errors.h"
+#include "matrix.h"
 
 void mtx_matrix_set_identity(mtx_matrix_t *M) {
   MTX_ENSURE_INIT(M);
@@ -154,6 +155,38 @@ double mtx_matrix_distance_each(mtx_matrix_t *_M_D, const mtx_matrix_t *A,
 
   return dt;
 }
+
+int mtx_matrix_get_upper(mtx_matrix_t *_M, const mtx_matrix_t *M) {
+  MTX_ENSURE_INIT(M);
+
+  if (_M->data == NULL) {
+    mtx_matrix_init(_M, M->dy, M->dx);
+  } else if (!MTX_MATRIX_SAME_DIMENSIONS(_M, M)) {
+    MTX_DIMEN_ERR(_M);
+  }
+
+  MTX_MAKE_OUTPUT_ALIAS(upper, _M);
+  MTX_ENSURE_SAFE_OUTPUT_RULES(upper, _M, M, MTX_MATRIX_OVERLAP_AFTER(M, _M));
+
+  int u_max = upper.dy < upper.dx ? upper.dy : upper.dx;
+
+  mtx_matrix_view_t upper_max = mtx_matrix_view_of(M, 0, 0, u_max, M->dx);
+  mtx_matrix_view_t upper_to =
+      mtx_matrix_view_of(&upper, 0, 0, u_max, upper.dx);
+  mtx_matrix_copy(&upper_to.matrix, &upper_max.matrix);
+
+  // Fill zeroes in the lower
+  for (int i = 1; i < upper.dy; ++i) {
+    int max_zero = i < upper.dx ? i : upper.dx;
+    for (int j = 0; j < max_zero; ++j) {
+      mtx_matrix_at(&upper, i, j) = 0;
+    }
+  }
+
+  MTX_COMMIT_OUTPUT(upper, _M);
+  return 0;
+}
+
 #define DEF_MTX_MATRIX_SIMPLE_OP(name, operation)                              \
   int mtx_matrix_##name(mtx_matrix_t *_C, const mtx_matrix_t *A,               \
                         const mtx_matrix_t *B) {                               \

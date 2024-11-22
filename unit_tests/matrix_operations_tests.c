@@ -120,11 +120,23 @@ static MAKE_ROUTINE(check_identity, const char *m_class) {
   }
 
   mtx_matrix_free(&A);
-} MAKE_TEST(matrix_arithmetic, set_identity) {
+}
+MAKE_TEST(matrix_arithmetic, set_identity) {
   CALL_ROUTINE(check_identity, "square");
   CALL_ROUTINE(check_identity, "dx < dy");
   CALL_ROUTINE(check_identity, "dx > dy");
 }
+
+MAKE_TEST(matrix_arithmetic, get_upper) {
+  CALL_ROUTINE(check_2m_i, mtx_matrix_get_upper, 1);
+  CALL_ROUTINE(check_2m_i, mtx_matrix_get_upper, 2);
+  CALL_ROUTINE(check_2m_i, mtx_matrix_get_upper, 3);
+}
+
+// MAKE_TEST(matrix_arithmetic, get_lower) {
+//   CALL_ROUTINE(check_2m_i, mtx_matrix_get_lower, 1);
+//   CALL_ROUTINE(check_2m_i, mtx_matrix_get_lower, 2);
+// }
 
 #undef MAXIMUM_ERROR
 
