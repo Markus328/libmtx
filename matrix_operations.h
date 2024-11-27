@@ -59,7 +59,7 @@ int mtx_matrix_get_upper(mtx_matrix_t *_M, const mtx_matrix_t *M);
 
 // Salva uma matriz triangular inferior em _M com os elementos não nulos sendo
 // os respectivos elementos em M.
-// int mtx_matrix_get_lower(mtx_matrix_t *_M, const mtx_matrix_t *M);
+int mtx_matrix_get_lower(mtx_matrix_t *_M, const mtx_matrix_t *M);
 
 #ifdef __cplusplus
 }

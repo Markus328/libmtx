@@ -133,10 +133,11 @@ MAKE_TEST(matrix_arithmetic, get_upper) {
   CALL_ROUTINE(check_2m_i, mtx_matrix_get_upper, 3);
 }
 
-// MAKE_TEST(matrix_arithmetic, get_lower) {
-//   CALL_ROUTINE(check_2m_i, mtx_matrix_get_lower, 1);
-//   CALL_ROUTINE(check_2m_i, mtx_matrix_get_lower, 2);
-// }
+MAKE_TEST(matrix_arithmetic, get_lower) {
+  CALL_ROUTINE(check_2m_i, mtx_matrix_get_lower, 1);
+  CALL_ROUTINE(check_2m_i, mtx_matrix_get_lower, 2);
+  CALL_ROUTINE(check_2m_i, mtx_matrix_get_lower, 2);
+}
 
 #undef MAXIMUM_ERROR
 

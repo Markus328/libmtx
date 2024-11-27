@@ -61,6 +61,7 @@ TEST_ORDERED_C_WRAPPER(matrix_arithmetic, s_mul, 31);
 TEST_ORDERED_C_WRAPPER(matrix_arithmetic, transpose, 31);
 TEST_ORDERED_C_WRAPPER(matrix_arithmetic, set_identity, 31);
 TEST_ORDERED_C_WRAPPER(matrix_arithmetic, get_upper, 31);
+TEST_ORDERED_C_WRAPPER(matrix_arithmetic, get_lower, 31);
 
 // LINEAR ALGEBRA
 

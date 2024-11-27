@@ -3,6 +3,7 @@
 #include "atomic_operations.h"
 #include "errors.h"
 #include "matrix.h"
+#include <string.h>
 
 void mtx_matrix_set_identity(mtx_matrix_t *M) {
   MTX_ENSURE_INIT(M);
@@ -156,6 +157,16 @@ double mtx_matrix_distance_each(mtx_matrix_t *_M_D, const mtx_matrix_t *A,
   return dt;
 }
 
+#define SET_MEM_COPY(_M, M)                                                    \
+  void *(*copy)(void *, const void *, size_t);                                 \
+  do {                                                                         \
+    if (MTX_MATRIX_OVERLAP(_M, M)) {                                           \
+      copy = memmove;                                                          \
+    } else {                                                                   \
+      copy = memcpy;                                                           \
+    }                                                                          \
+  } while (0)
+
 int mtx_matrix_get_upper(mtx_matrix_t *_M, const mtx_matrix_t *M) {
   MTX_ENSURE_INIT(M);
 
@@ -165,27 +176,61 @@ int mtx_matrix_get_upper(mtx_matrix_t *_M, const mtx_matrix_t *M) {
     MTX_DIMEN_ERR(_M);
   }
 
-  MTX_MAKE_OUTPUT_ALIAS(upper, _M);
-  MTX_ENSURE_SAFE_OUTPUT_RULES(upper, _M, M, MTX_MATRIX_OVERLAP_AFTER(M, _M));
+  if (!MTX_MATRIX_ARE_SAME(_M, M)) {
 
-  int u_max = upper.dy < upper.dx ? upper.dy : upper.dx;
+    SET_MEM_COPY(_M, M);
 
-  mtx_matrix_view_t upper_max = mtx_matrix_view_of(M, 0, 0, u_max, M->dx);
-  mtx_matrix_view_t upper_to =
-      mtx_matrix_view_of(&upper, 0, 0, u_max, upper.dx);
-  mtx_matrix_copy(&upper_to.matrix, &upper_max.matrix);
-
-  // Fill zeroes in the lower
-  for (int i = 1; i < upper.dy; ++i) {
-    int max_zero = i < upper.dx ? i : upper.dx;
-    for (int j = 0; j < max_zero; ++j) {
-      mtx_matrix_at(&upper, i, j) = 0;
+    int u_max = _M->dy < _M->dx ? _M->dy : _M->dx;
+    for (int i = 0; i < u_max; ++i) {
+      copy(&mtx_matrix_at(_M, i, i), &mtx_matrix_at(M, i, i),
+           (_M->dx - i) * sizeof(double));
     }
   }
 
-  MTX_COMMIT_OUTPUT(upper, _M);
+  // Fill zeroes in the lower
+  for (int i = 1; i < _M->dy; ++i) {
+    int max_zero = i < _M->dx ? i : _M->dx;
+    for (int j = 0; j < max_zero; ++j) {
+      mtx_matrix_at(_M, i, j) = 0;
+    }
+  }
+
   return 0;
 }
+
+int mtx_matrix_get_lower(mtx_matrix_t *_M, const mtx_matrix_t *M) {
+
+  MTX_ENSURE_INIT(M);
+
+  if (_M->data == NULL) {
+    mtx_matrix_init(_M, M->dy, M->dx);
+  } else if (!MTX_MATRIX_SAME_DIMENSIONS(_M, M)) {
+    MTX_DIMEN_ERR(_M);
+  }
+
+  if (!MTX_MATRIX_ARE_SAME(_M, M)) {
+
+    SET_MEM_COPY(_M, M);
+
+    int l_max = _M->dx;
+    for (int i = 0; i < _M->dy; ++i) {
+      int els = i + 1 < _M->dx ? i + 1 : _M->dx;
+      copy(mtx_matrix_row(_M, i), mtx_matrix_row(M, i), els * sizeof(double));
+    }
+  }
+
+  // Fill zeroes in the upper
+  int u_max = _M->dy < _M->dx ? _M->dy : _M->dx;
+  for (int i = 0; i < u_max - 1; ++i) {
+    for (int j = i + 1; j < _M->dx; ++j) {
+      mtx_matrix_at(_M, i, j) = 0;
+    }
+  }
+
+  return 0;
+}
+
+#undef SET_MEM_COPY
 
 #define DEF_MTX_MATRIX_SIMPLE_OP(name, operation)                              \
   int mtx_matrix_##name(mtx_matrix_t *_C, const mtx_matrix_t *A,               \
