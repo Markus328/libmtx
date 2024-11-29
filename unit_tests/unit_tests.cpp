@@ -71,6 +71,7 @@ TEST_GROUP_C_WRAPPER(linalg) {
 };
 
 TEST_ORDERED_C_WRAPPER(linalg, permutate, 40);
+// TEST_ORDERED_C_WRAPPER(linalg, lu_decomp, 41);
 
 int main(int argc, char **argv) {
   mtx_cfg_set_mem_alloc(mtx_default_mem_alloc);
