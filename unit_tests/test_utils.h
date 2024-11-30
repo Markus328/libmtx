@@ -138,7 +138,7 @@ void copy_next_matrix_of(mtx_matrix_t *M, struct test_mtx_files *files,
 #define COPY_NEXT_TEST_MTX_NAME(MTX, NAME_)                                    \
   copy_next_matrix_of((MTX), __TEST_FILES, #NAME_)
 
-extern mtx_matrix_t M;
+extern mtx_matrix_t __M;
 #define M_DX 25
 #define M_DY 25
 
@@ -146,7 +146,7 @@ extern mtx_matrix_t M;
 // contiguous array and reserve space usingn mtx_matrix_ref_a(). Still slower
 // than views but better.
 #define RESERVE_MTX(init_i, init_j, dy, dx)                                    \
-  mtx_matrix_view_of(&M, init_i, init_j, dy, dx).matrix
+  mtx_matrix_view_of(&__M, init_i, init_j, dy, dx).matrix
 
 #ifdef __cplusplus
 }

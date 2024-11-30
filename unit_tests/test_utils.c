@@ -151,4 +151,4 @@ mtx_matrix_t get_mtx_from(const char *path) {
   return m;
 }
 
-mtx_matrix_t M = {0};
+mtx_matrix_t __M = {0};
