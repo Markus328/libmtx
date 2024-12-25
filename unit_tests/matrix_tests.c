@@ -28,13 +28,13 @@ MAKE_TEST(matrix_lifecycle, init) {
 
   mock_c()->expectNCalls(3, "malloc_mock");
 
-  mtx_matrix_init(&M, M_DY, M_DX);
-  CHECK_C(M.data != NULL);
-  CHECK_C_TEXT(M.offX == 0 && M.offY == 0,
+  mtx_matrix_init(&__M, M_DY, M_DX);
+  CHECK_C(__M.data != NULL);
+  CHECK_C_TEXT(__M.offX == 0 && __M.offY == 0,
                "Wrong offsets on matrix_initialization!");
-  CHECK_C_TEXT(M.dy == M_DY && M.dx == M_DX,
+  CHECK_C_TEXT(__M.dy == M_DY && __M.dx == M_DX,
                "Wrong dimensions on initialization!");
-  CHECK_C_TEXT(M.data->size1 == M_DY && M.data->size2 == M_DX,
+  CHECK_C_TEXT(__M.data->size1 == M_DY && __M.data->size2 == M_DX,
                "Wrong matrix_data dimensions on initialization!");
 }
 
@@ -58,7 +58,7 @@ MAKE_TEST(matrix_lifecycle, free) {
 
   mock_c()->expectNCalls(3, "free_mock");
 
-  mtx_matrix_free(&M);
+  mtx_matrix_free(&__M);
 }
 
 MAKE_TEST(matrix_lifecycle, free_fail) {
@@ -124,21 +124,21 @@ MAKE_TEST(matrix_lifecycle, raw_a) {
 
 MAKE_TEST(matrix_basic, equals) {
   mock_c()->disable();
-  mtx_matrix_t m = M;
+  mtx_matrix_t m = __M;
 
-  CHECK_C_TEXT(mtx_matrix_equals(&m, &M),
+  CHECK_C_TEXT(mtx_matrix_equals(&m, &__M),
                "m and M are equal, but mtx_matrix_equals() sees their "
                "(unexistent) differences.");
   m.dx--;
 
-  CHECK_C_TEXT(!mtx_matrix_equals(&M, &m),
+  CHECK_C_TEXT(!mtx_matrix_equals(&__M, &m),
                "M is more fat than m and mtx_matrix_equals() thinks its just a "
                "feeling.");
 
-  m.dx = M.dx;
+  m.dx = __M.dx;
   m.offY++; // Makes m also invalid.
 
-  CHECK_C_TEXT(!mtx_matrix_equals(&m, &M),
+  CHECK_C_TEXT(!mtx_matrix_equals(&m, &__M),
                "M is taller than m but mtx_matrix_equals() is so big as "
                "it can't see any difference.");
 
@@ -162,18 +162,19 @@ MAKE_TEST(matrix_basic, clone) {
   mock_c()->expectNCalls(M_DY, "memcpy_mock");
   mock_c()->ignoreOtherCalls();
   mtx_matrix_t n;
-  mtx_matrix_clone(&n, &M);
+  mtx_matrix_clone(&n, &__M);
 
-  CHECK_C(!MTX_MATRIX_ARE_SAME(&n, &M));
-  CHECK_C(mtx_matrix_equals(&n, &M));
+  CHECK_C(!MTX_MATRIX_ARE_SAME(&n, &__M));
+  CHECK_C(mtx_matrix_equals(&n, &__M));
 
   mtx_matrix_free(&n);
 }
 
 MAKE_TEST(matrix_basic, copy) {
 
-  mtx_matrix_view_t m = mtx_matrix_view_of(&M, 0, 0, M_DY / 2, M_DX);
-  mtx_matrix_view_t n = mtx_matrix_view_of(&M, m.matrix.dy, 0, M_DY / 2, M_DX);
+  mtx_matrix_view_t m = mtx_matrix_view_of(&__M, 0, 0, M_DY / 2, M_DX);
+  mtx_matrix_view_t n =
+      mtx_matrix_view_of(&__M, m.matrix.dy, 0, M_DY / 2, M_DX);
 
   for (int i = 0; i < m.matrix.dy; ++i) {
     for (int j = 0; j < m.matrix.dx; ++j) {
@@ -191,9 +192,9 @@ MAKE_TEST(matrix_basic, copy) {
 
 MAKE_TEST(matrix_basic, copy_overlap) {
   mtx_matrix_view_t view_before =
-      mtx_matrix_view_of(&M, 0, 0, M_DY - 1, M_DX - 1);
+      mtx_matrix_view_of(&__M, 0, 0, M_DY - 1, M_DX - 1);
   mtx_matrix_view_t view_after =
-      mtx_matrix_view_of(&M, 1, 1, M_DY - 1, M_DX - 1);
+      mtx_matrix_view_of(&__M, 1, 1, M_DY - 1, M_DX - 1);
 
   // memmove since overlaps breaks restrict contract.
   mock_c()->expectNCalls(view_after.matrix.dy, "memmove_mock");
@@ -212,7 +213,7 @@ MAKE_TEST(matrix_basic, copy_overlap) {
 MAKE_TEST(matrix_basic, fill) {
   mock_c()->disable();
   double arr[9] = {0, 1, 2, 3, 4, 5, 6, 7, 8};
-  mtx_matrix_view_t m = mtx_matrix_view_of(&M, 1, 1, 3, 3);
+  mtx_matrix_view_t m = mtx_matrix_view_of(&__M, 1, 1, 3, 3);
 
   mock_c()->enable();
   mock_c()->expectNCalls(3, "memcpy_mock");
@@ -229,7 +230,7 @@ MAKE_TEST(matrix_basic, fill) {
 MAKE_TEST(matrix_basic, view) {
 
 #define CHECK_VIEW_BASIC(view, y, x, d1, d2)                                   \
-  CHECK_C_TEXT(MTX_MATRIX_ARE_SHARED(&view.matrix, &M),                        \
+  CHECK_C_TEXT(MTX_MATRIX_ARE_SHARED(&view.matrix, &__M),                      \
                "for some reason MTX_MATRIX_ARE_SHARED() thinks " #view         \
                " and M have nothing to do with each other");                   \
   CHECK_C_TEXT(MTX_MATRIX_IS_VIEW(&(view).matrix), #view                       \
@@ -238,16 +239,16 @@ MAKE_TEST(matrix_basic, view) {
                "wrong offsets at created view " #view);                        \
   CHECK_C_TEXT((view).matrix.dy == d1 && (view).matrix.dx == d2,               \
                "wrong dimensions at created view " #view);                     \
-  CHECK_C_TEXT(&mtx_matrix_at(&M, y, x) ==                                     \
+  CHECK_C_TEXT(&mtx_matrix_at(&__M, y, x) ==                                   \
                    &mtx_matrix_at(&(view).matrix, 0, 0),                       \
                "wrong mtx_matrix_at access in view" #view)
 
-  mtx_matrix_view_t v1 = mtx_matrix_view_of(&M, 3, 1, 5, 5);
+  mtx_matrix_view_t v1 = mtx_matrix_view_of(&__M, 3, 1, 5, 5);
 
   CHECK_VIEW_BASIC(v1, 3, 1, 5, 5);
 
   // Will overlap with v1 and come after.
-  mtx_matrix_view_t v2 = mtx_matrix_view_of(&M, 3, 3, 5, 5);
+  mtx_matrix_view_t v2 = mtx_matrix_view_of(&__M, 3, 3, 5, 5);
   CHECK_VIEW_BASIC(v2, 3, 3, 5, 5);
 
   CHECK_C_TEXT(MTX_MATRIX_OVERLAP(&v1.matrix, &v2.matrix),
@@ -278,17 +279,17 @@ MAKE_TEST(matrix_basic, view_fail) {
       ->withIntParameters("error", MTX_BOUNDS_ERR);
 
   mtx_matrix_view_t vf;
-  TRY vf = mtx_matrix_view_of(&M, M.dy, 0, 2, 2);
+  TRY vf = mtx_matrix_view_of(&__M, __M.dy, 0, 2, 2);
   CATCH(INTEGER, exp1) {}
-  TRY vf = mtx_matrix_view_of(&M, M.dy - 1, 0, 2, 1);
+  TRY vf = mtx_matrix_view_of(&__M, __M.dy - 1, 0, 2, 1);
   CATCH(INTEGER, exp2) {}
-  TRY vf = mtx_matrix_view_of(&M, M.dy - 1, 0, 1, M.dx + 1);
+  TRY vf = mtx_matrix_view_of(&__M, __M.dy - 1, 0, 1, __M.dx + 1);
   CATCH(INTEGER, exp3) {}
 }
 MAKE_TEST(matrix_basic, view_free) {
   mock_c()->expectNoCall("free_mock");
 
-  mtx_matrix_view_t view = mtx_matrix_row_of(&M, 0);
+  mtx_matrix_view_t view = mtx_matrix_row_of(&__M, 0);
   mock_c()
       ->expectOneCall("test_fail")
       ->withIntParameters("error", MTX_INVALID_ERR);
@@ -305,7 +306,7 @@ TEST_GROUP_C_TEARDOWN(matrix_io) {
 
 #define FIOTEST(variation, sys_fun, ncalls)                                    \
   mock_c()->disable();                                                         \
-  mtx_matrix_view_t m = mtx_matrix_view_of(&M, 3, 3, 2, 2);                    \
+  mtx_matrix_view_t m = mtx_matrix_view_of(&__M, 3, 3, 2, 2);                  \
                                                                                \
   mock_c()->enable();                                                          \
                                                                                \
@@ -326,7 +327,7 @@ MAKE_TEST(matrix_io, fprint) {
 // TODO: Impl better IO errors checks.
 #define FIOTEST_FAIL(variation, sys_fun)                                       \
   mock_c()->disable();                                                         \
-  mtx_matrix_view_t m = mtx_matrix_view_of(&M, 3, 3, 2, 2);                    \
+  mtx_matrix_view_t m = mtx_matrix_view_of(&__M, 3, 3, 2, 2);                  \
   mock_c()->enable();                                                          \
                                                                                \
   mock_c()                                                                     \

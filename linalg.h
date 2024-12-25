@@ -9,6 +9,8 @@ extern "C" {
 
 typedef mtx_matrix_t mtx_matrix_perm_t;
 
+// TODO: Rewrite the header and source documentation to english.
+
 // Inicializa a matriz _M_PERM como uma matriz de permutação de dimensões dxd.
 void mtx_matrix_init_perm(mtx_matrix_perm_t *_M_PERM, int d);
 

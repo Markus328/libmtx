@@ -182,7 +182,7 @@ void mtx_matrix_copy(mtx_matrix_t *M_TO, const mtx_matrix_t *M_FROM) {
   }
 
   void *(*copy)(void *, const void *, size_t) = memcpy;
-  if (MTX_MATRIX_OVERLAP_AFTER(M_FROM, M_TO)) {
+  if (MTX_MATRIX_OVERLAP(M_FROM, M_TO)) {
     copy = memmove;
   }
   for (int i = 0; i < M_TO->dy; ++i) {

@@ -19,12 +19,13 @@ void throw_error(const char *msg_fmt, ...) {
   va_list args;
   va_start(args, msg_fmt);
 
-  // fprintf normal error message
-  vfprintf(stderr, msg_fmt, args);
+  char msg[MAX_ERROR_LENGHT + 1];
+
+  vsnprintf(msg, MAX_ERROR_LENGHT + 1, msg_fmt, args);
 
   va_end(args);
 
-  FAIL_C();
+  FAIL_TEXT_C(msg);
 }
 
 static inline FILE *__open_fd(struct test_mtx_files *files,
@@ -150,4 +151,4 @@ mtx_matrix_t get_mtx_from(const char *path) {
   return m;
 }
 
-mtx_matrix_t M = {0};
+mtx_matrix_t __M = {0};
